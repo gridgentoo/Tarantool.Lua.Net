@@ -248,8 +248,8 @@ txv_delete(struct txv *v)
 	mempool_free(&v->tx->xm->txv_mempool, v);
 }
 
-void
-vy_tx_create(struct tx_manager *xm, struct vy_tx *tx)
+NODISCARD int
+vy_tx_create(struct tx_manager *xm, struct vy_tx *tx, enum tx_type type)
 {
 	stailq_create(&tx->log);
 	write_set_new(&tx->write_set);
@@ -257,10 +257,19 @@ vy_tx_create(struct tx_manager *xm, struct vy_tx *tx)
 	tx->write_size = 0;
 	tx->xm = xm;
 	tx->state = VINYL_TX_READY;
-	tx->read_view = (struct vy_read_view *)xm->p_global_read_view;
+	tx->type = type;
+	if (type == VINYL_TX_RO) {
+		struct vy_read_view *rv = tx_manager_read_view(tx->xm);
+		if (rv == NULL)
+			return -1;
+		tx->read_view = rv;
+	} else {
+		tx->read_view = (struct vy_read_view *)xm->p_global_read_view;
+	}
 	tx->psn = 0;
 	rlist_create(&tx->on_destroy);
 	xm->stat.active++;
+	return 0;
 }
 
 void
@@ -289,7 +298,8 @@ vy_tx_destroy(struct vy_tx *tx)
 static bool
 vy_tx_is_ro(struct vy_tx *tx)
 {
-	return tx->write_set.rbt_root == &tx->write_set.rbt_nil;
+	return tx->type == VINYL_TX_RO ||
+	       tx->write_set.rbt_root == &tx->write_set.rbt_nil;
 }
 
 /** Return true if the transaction is in read view. */
@@ -378,14 +388,17 @@ vy_tx_abort_readers(struct vy_tx *tx, struct txv *v)
 }
 
 struct vy_tx *
-vy_tx_begin(struct tx_manager *xm)
+vy_tx_begin(struct tx_manager *xm, enum tx_type type)
 {
 	struct vy_tx *tx = mempool_alloc(&xm->tx_mempool);
 	if (unlikely(tx == NULL)) {
 		diag_set(OutOfMemory, sizeof(*tx), "mempool", "struct vy_tx");
 		return NULL;
 	}
-	vy_tx_create(xm, tx);
+	if (vy_tx_create(xm, tx, type) != 0) {
+		mempool_free(&xm->tx_mempool, tx);
+		return NULL;
+	}
 	return tx;
 }
 

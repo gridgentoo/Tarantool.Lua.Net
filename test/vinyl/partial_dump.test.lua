@@ -41,7 +41,9 @@ INDEX_COUNT = box.cfg.vinyl_write_threads * 3
 assert(INDEX_COUNT < 100)
 
 s = box.space.test
+box.begin()
 s:select()
+box.commit()
 
 bad_index = -1
 test_run:cmd("setopt delimiter ';'")

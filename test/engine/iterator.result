@@ -4017,6 +4017,9 @@ r
   - [3, 2]
   - [3, 3]
 ...
+box.begin()
+---
+...
 itr1,itr2,itr3 = s:pairs({2}, {iterator = 'REQ'})
 ---
 ...
@@ -4028,6 +4031,9 @@ r = {}
 ---
 ...
 for k,v in itr1,itr2,itr3 do table.insert(r, v) end
+---
+...
+box.commit()
 ---
 ...
 r

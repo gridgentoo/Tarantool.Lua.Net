@@ -337,10 +337,12 @@ r = {}
 for k,v in itr1,itr2,itr3 do table.insert(r, v) end
 r
 
+box.begin()
 itr1,itr2,itr3 = s:pairs({2}, {iterator = 'REQ'})
 s:replace{2, 4}
 r = {}
 for k,v in itr1,itr2,itr3 do table.insert(r, v) end
+box.commit()
 r
 
 r = nil
