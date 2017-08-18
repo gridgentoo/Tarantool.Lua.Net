@@ -40,6 +40,18 @@ test_run:cmd('restart server default')
 INDEX_COUNT = box.cfg.vinyl_write_threads * 3
 assert(INDEX_COUNT < 100)
 
+test_run:cmd("setopt delimiter ';'")
+function tuples_equal(t1, t2)
+    if t1 == nil and t2 == nil then return true end
+    if t1 == nil or t2 == nil then return false end
+    if #t1 ~= #t2 then return false end
+    for i = 1, #t1 do
+        if t1[i] ~= t2[i] then return false end
+    end
+    return true
+end
+test_run:cmd("setopt delimiter ''");
+
 s = box.space.test
 s:select()
 
@@ -50,7 +62,7 @@ for i = 1, INDEX_COUNT - 1 do
         bad_index = i
     end
     for _, v in s.index[i]:pairs() do
-        if v ~= s:get(v[1]) then
+        if not tuples_equal(v, s:get(v[1])) then
             bad_index = i
         end
     end

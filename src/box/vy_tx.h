@@ -69,6 +69,12 @@ enum tx_state {
 	VINYL_TX_ABORT,
 };
 
+/** Transaction type. */
+enum tx_type {
+	VINYL_TX_RO,
+	VINYL_TX_RW,
+};
+
 /**
  * A single operation made by a transaction:
  * a single read or write in a vy_index.
@@ -186,14 +192,15 @@ struct vy_tx {
 	/** Current state of the transaction.*/
 	enum tx_state state;
 	/**
-	 * The read view of this transaction. When a transaction
+	 * The read view of this transaction. When a read-write transaction
 	 * is started, it is set to the "read committed" state,
 	 * or actually, "read prepared" state, in other words,
 	 * all changes of all prepared transactions are visible
 	 * to this transaction. Upon a conflict, the transaction's
 	 * read view is changed: it begins to point to the
 	 * last state of the database before the conflicting
-	 * change.
+	 * change. Read only transactions are origianlly created with
+	 * with a read view and does not see further database modification.
 	 */
 	struct vy_read_view *read_view;
 	/**
@@ -203,6 +210,8 @@ struct vy_tx {
 	int64_t psn;
 	/* List of triggers invoked when this transaction ends. */
 	struct rlist on_destroy;
+	/** Type of a TX - read only of read-write. */
+	enum tx_type type;
 };
 
 /** Transaction manager object. */
@@ -293,8 +302,8 @@ int64_t
 tx_manager_vlsn(struct tx_manager *xm);
 
 /** Initialize a tx object. */
-void
-vy_tx_create(struct tx_manager *xm, struct vy_tx *tx);
+NODISCARD int
+vy_tx_create(struct tx_manager *xm, struct vy_tx *tx, enum tx_type type);
 
 /** Destroy a tx object. */
 void
@@ -302,7 +311,7 @@ vy_tx_destroy(struct vy_tx *tx);
 
 /** Begin a new transaction. */
 struct vy_tx *
-vy_tx_begin(struct tx_manager *xm);
+vy_tx_begin(struct tx_manager *xm, enum tx_type type);
 
 /** Prepare a transaction to be committed. */
 int

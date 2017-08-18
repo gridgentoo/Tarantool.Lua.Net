@@ -3679,7 +3679,7 @@ vy_replace(struct vy_env *env, struct vy_tx *tx, struct txn_stmt *stmt,
 struct vy_tx *
 vy_begin(struct vy_env *env)
 {
-	return vy_tx_begin(env->xm);
+	return vy_tx_begin(env->xm, VINYL_TX_RW);
 }
 
 int
@@ -4862,7 +4862,11 @@ vy_cursor_new(struct vy_env *env, struct vy_tx *tx, struct vy_index *index,
 	trigger_create(&c->on_tx_destroy, vy_cursor_on_tx_destroy, NULL, NULL);
 	if (tx == NULL) {
 		tx = &c->tx_autocommit;
-		vy_tx_create(env->xm, tx);
+		if (vy_tx_create(env->xm, tx, VINYL_TX_RO) != 0) {
+			mempool_free(&env->cursor_pool, c);
+			return NULL;
+		}
+
 	} else {
 		/*
 		 * Register a trigger that will abort this cursor
