@@ -601,7 +601,7 @@ box_set_readahead(void)
 {
 	int readahead = cfg_geti("readahead");
 	box_check_readahead(readahead);
-	iobuf_set_readahead(readahead);
+	iobuf_readahead = readahead;
 }
 
 void
