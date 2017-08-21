@@ -350,26 +350,21 @@ MemtxEngine::rollbackStatement(struct txn *, struct txn_stmt *stmt)
 	if (stmt->old_tuple == NULL && stmt->new_tuple == NULL)
 		return;
 	struct space *space = stmt->space;
-	int index_count;
-	struct MemtxSpace *handler = (struct MemtxSpace *) space->handler;
 
 	/* Only roll back the changes if they were made. */
 	if (stmt->engine_savepoint == NULL)
-		index_count = 0;
-	else if (handler->replace == memtx_replace_all_keys)
-		index_count = space->index_count;
-	else if (handler->replace == memtx_replace_primary_key)
-		index_count = 1;
-	else
+		goto clear;
+	else if (m_state == MEMTX_INITIAL_RECOVERY)
 		panic("transaction rolled back during snapshot recovery");
 
-	for (int i = 0; i < index_count; i++) {
+	for (uint32_t i = 0; i < space->index_count; i++) {
 		Index *index = space->index[i];
 		index->replace(stmt->new_tuple, stmt->old_tuple, DUP_INSERT);
 	}
 	/** Rollback change of bsize */
 	space_bsize_rollback(space, stmt->bsize_change);
 
+clear:
 	if (stmt->new_tuple)
 		tuple_unref(stmt->new_tuple);
 
