@@ -392,15 +392,29 @@ Table *sqlite3LocateTableItem(
 ** and the name of the database that contains the index.
 ** Return NULL if not found.
 */
-Index *sqlite3FindIndex(sqlite3 *db, const char *zName){
-  Index *p = 0;
+Index *sqlite3FindIndex(sqlite3 *db, const char *zName, Table *pTab){
   /* All mutexes are required for schema access.  Make sure we hold them. */
   assert( sqlite3BtreeHoldsAllMutexes(db) );
-  Schema *pSchema = db->mdb.pSchema;
-  assert( pSchema );
+  assert( pTab );
   assert( sqlite3SchemaMutexHeld(db, 0) );
 
-  return sqlite3HashFind(&pSchema->idxHash, zName);
+  return sqlite3HashFind(&pTab->idxHash, zName);
+}
+
+Index *sqlite3LocateIndex(sqlite3 *db, const char *zName, const char *zTable){
+  assert( zName );
+  assert( zTable );
+
+  assert( sqlite3BtreeHoldsAllMutexes(db) );
+  assert( sqlite3SchemaMutexHeld(db, 0) );
+
+  Table *pTab = sqlite3FindTable(db, zTable);
+
+  if ( pTab==0 ) {
+    return 0;
+  }
+  
+  return sqlite3FindIndex(db, zName, pTab);
 }
 
 /*
@@ -426,13 +440,13 @@ static void freeIndex(sqlite3 *db, Index *p){
 ** the index hash table and free all memory structures associated
 ** with the index.
 */
-void sqlite3UnlinkAndDeleteIndex(sqlite3 *db, const char *zIdxName){
-  Index *pIndex;
-  Hash *pHash;
-
+void sqlite3UnlinkAndDeleteIndex(sqlite3 *db, Index *pIndex)
+{
   assert( sqlite3SchemaMutexHeld(db, 0) );
-  pHash = &db->mdb.pSchema->idxHash;
-  pIndex = sqlite3HashInsert(pHash, zIdxName, 0);
+  assert( pIndex!=0 );
+  assert( &pIndex->pTable->idxHash );
+
+  pIndex = sqlite3HashInsert(&pIndex->pTable->idxHash, pIndex->zName, 0);
   if( ALWAYS(pIndex) ){
     if( pIndex->pTable->pIndex==pIndex ){
       pIndex->pTable->pIndex = pIndex->pNext;
@@ -448,6 +462,7 @@ void sqlite3UnlinkAndDeleteIndex(sqlite3 *db, const char *zIdxName){
     }
     freeIndex(db, pIndex);
   }
+
   db->flags |= SQLITE_InternChanges;
 }
 
@@ -538,7 +553,7 @@ static void SQLITE_NOINLINE deleteTable(sqlite3 *db, Table *pTable){
     if( (db==0 || db->pnBytesFreed==0) && !IsVirtual(pTable) ){
       char *zName = pIndex->zName; 
       TESTONLY ( Index *pOld = ) sqlite3HashInsert(
-         &pIndex->pSchema->idxHash, zName, 0
+         &pTable->idxHash, zName, 0
       );
       assert( db==0 || sqlite3SchemaMutexHeld(db, pIndex->pSchema) );
       assert( pOld==pIndex || pOld==0 );
@@ -551,6 +566,7 @@ static void SQLITE_NOINLINE deleteTable(sqlite3 *db, Table *pTable){
 
   /* Delete the Table structure itself.
   */
+  sqlite3HashClear(&pTable->idxHash);
   sqlite3DeleteColumnNames(db, pTable);
   sqlite3DbFree(db, pTable->zName);
   sqlite3DbFree(db, pTable->zColAff);
@@ -830,10 +846,6 @@ void sqlite3StartTable(
       }
       goto begin_table_error;
     }
-    if( sqlite3FindIndex(db, zName)!=0 ){
-      sqlite3ErrorMsg(pParse, "there is already an index named %s", zName);
-      goto begin_table_error;
-    }
   }
 
   pTable = sqlite3DbMallocZero(db, sizeof(Table));
@@ -846,6 +858,7 @@ void sqlite3StartTable(
   pTable->zName = zName;
   pTable->iPKey = -1;
   pTable->pSchema = db->mdb.pSchema;
+  sqlite3HashInit(&pTable->idxHash);
   pTable->nTabRef = 1;
   pTable->nRowLogEst = 200; assert( 200==sqlite3LogEst(1048576) );
   assert( pParse->pNewTable==0 );
@@ -2380,7 +2393,7 @@ static void sqliteViewResetAll(sqlite3 *db){
 */
 #ifndef SQLITE_OMIT_AUTOVACUUM
 void sqlite3RootPageMoved(sqlite3 *db, int iFrom, int iTo){
-  HashElem *pElem;
+  HashElem *pElem, *pItem;
   Hash *pHash;
   Db *pDb;
 
@@ -2389,15 +2402,15 @@ void sqlite3RootPageMoved(sqlite3 *db, int iFrom, int iTo){
   pHash = &pDb->pSchema->tblHash;
   for(pElem=sqliteHashFirst(pHash); pElem; pElem=sqliteHashNext(pElem)){
     Table *pTab = sqliteHashData(pElem);
+    Hash *IdxHash = &pTab->idxHash;
     if( pTab->tnum==iFrom ){
       pTab->tnum = iTo;
     }
-  }
-  pHash = &pDb->pSchema->idxHash;
-  for(pElem=sqliteHashFirst(pHash); pElem; pElem=sqliteHashNext(pElem)){
-    Index *pIdx = sqliteHashData(pElem);
-    if( pIdx->tnum==iFrom ){
-      pIdx->tnum = iTo;
+    for(pItem=sqliteHashFirst(IdxHash); pItem; pElem=sqliteHashNext(pItem)){
+      Index *pIdx = sqliteHashData(pItem);
+      if( pIdx->tnum==iFrom ){
+        pIdx->tnum = iTo;
+      }
     }
   }
 }
@@ -3122,9 +3135,10 @@ void sqlite3CreateIndex(
         goto exit_create_index;
       }
     }
-    if( sqlite3FindIndex(db, zName)!=0 ){
+    if( sqlite3FindIndex(db, zName, pTab)!=0 ){
       if( !ifNotExist ){
-        sqlite3ErrorMsg(pParse, "index %s already exists", zName);
+        sqlite3ErrorMsg(pParse, "index %s.%s already exists",
+                        pTab->zName, zName);
       }else{
         assert( !db->init.busy );
         sqlite3CodeVerifySchema(pParse);
@@ -3370,7 +3384,7 @@ void sqlite3CreateIndex(
     Index *p;
     assert( !IN_DECLARE_VTAB );
     assert( sqlite3SchemaMutexHeld(db, pIndex->pSchema) );
-    p = sqlite3HashInsert(&pIndex->pSchema->idxHash, 
+    p = sqlite3HashInsert(&pTab->idxHash, 
                           pIndex->zName, pIndex);
     if( p ){
       assert( p==pIndex );  /* Malloc must have failed */
@@ -3515,13 +3529,17 @@ void sqlite3DefaultRowEst(Index *pIdx){
 ** This routine will drop an existing named index.  This routine
 ** implements the DROP INDEX statement.
 */
-void sqlite3DropIndex(Parse *pParse, SrcList *pName, int ifExists){
+void sqlite3DropIndex(Parse *pParse, SrcList *pName, Token *pName2,
+                      int ifExists){
   Index *pIndex;
   Vdbe *v = sqlite3GetVdbe(pParse);
   sqlite3 *db = pParse->db;
+  char *zTableName = 0;
   int iDb;
 
   assert( pParse->nErr==0 );   /* Never called with prior errors */
+  assert( pName2!=0 );
+
   if( db->mallocFailed ){
     goto exit_drop_index;
   }
@@ -3535,10 +3553,14 @@ void sqlite3DropIndex(Parse *pParse, SrcList *pName, int ifExists){
   if( SQLITE_OK!=sqlite3ReadSchema(pParse) ){
     goto exit_drop_index;
   }
-  pIndex = sqlite3FindIndex(db, pName->a[0].zName);
+
+  assert( pName2->n > 0 );
+  zTableName = sqlite3NameFromToken(db, pName2);
+
+  pIndex = sqlite3LocateIndex(db, pName->a[0].zName, zTableName);
   if( pIndex==0 ){
     if( !ifExists ){
-      sqlite3ErrorMsg(pParse, "no such index: %S", pName, 0);
+      sqlite3ErrorMsg(pParse, "no such index: %s.%S", zTableName, pName, 0);
     }else{
       sqlite3CodeVerifySchema(pParse);
     }
@@ -3554,14 +3576,13 @@ void sqlite3DropIndex(Parse *pParse, SrcList *pName, int ifExists){
 #ifndef SQLITE_OMIT_AUTHORIZATION
   {
     int code = SQLITE_DROP_INDEX;
-    Table *pTab = pIndex->pTable;
     const char *zDb = db->mdb.zDbSName;
     const char *zTab = MASTER_NAME;
     if( sqlite3AuthCheck(pParse, SQLITE_DELETE, zTab, 0, zDb) ){
       goto exit_drop_index;
     }
-    if( !OMIT_TEMPDB && iDb ) code = SQLITE_DROP_TEMP_INDEX;
-    if( sqlite3AuthCheck(pParse, code, pIndex->zName, pTab->zName, zDb) ){
+    if( sqlite3AuthCheck(pParse, code, pIndex->zName,
+			 pIndex->pTable->zName, zDb) ){
       goto exit_drop_index;
     }
   }
@@ -3579,10 +3600,13 @@ void sqlite3DropIndex(Parse *pParse, SrcList *pName, int ifExists){
 
   sqlite3ClearStatTables(pParse, "idx", pIndex->zName);
   sqlite3ChangeCookie(pParse);
-  sqlite3VdbeAddOp4(v, OP_DropIndex, 0, 0, 0, pIndex->zName, 0);
+
+  sqlite3VdbeAddOp3(v, OP_DropIndex, 0, 0, 0);
+  sqlite3VdbeAppendP4(v, pIndex, P4_INDEX);
 
 exit_drop_index:
   sqlite3SrcListDelete(db, pName);
+  sqlite3DbFree(db, zTableName);
 }
 
 /*
@@ -4272,10 +4296,10 @@ static void reindexDatabases(Parse *pParse, char const *zColl){
 /*
 ** Generate code for the REINDEX command.
 **
-**        REINDEX                            -- 1
-**        REINDEX  <collation>               -- 2
-**        REINDEX  ?<database>.?<tablename>  -- 3
-**        REINDEX  ?<database>.?<indexname>  -- 4
+**        REINDEX                             -- 1
+**        REINDEX  <collation>                -- 2
+**        REINDEX  <tablename>                -- 3
+**        REINDEX  <indexname> ON <tablename> -- 4
 **
 ** Form 1 causes all indices in all attached databases to be rebuilt.
 ** Form 2 rebuilds all indices in all databases that use the named
@@ -4285,7 +4309,8 @@ static void reindexDatabases(Parse *pParse, char const *zColl){
 #ifndef SQLITE_OMIT_REINDEX
 void sqlite3Reindex(Parse *pParse, Token *pName1, Token *pName2){
   CollSeq *pColl;             /* Collating sequence to be reindexed, or NULL */
-  char *z;                    /* Name of a table or index */
+  char *z = 0;                /* Name of index */
+  char *zTable = 0;           /* Name of indexed table */
   const char *zDb;            /* Name of the database */
   Table *pTab;                /* A table in the database */
   Index *pIndex;              /* An index associated with pTab */
@@ -4315,9 +4340,8 @@ void sqlite3Reindex(Parse *pParse, Token *pName1, Token *pName2){
     }
     sqlite3DbFree(db, zColl);
   }
-  iDb = sqlite3TwoPartName(pParse, pName1, &pObjName);
   if( iDb<0 ) return;
-  z = sqlite3NameFromToken(db, pObjName);
+  z = sqlite3NameFromToken(db, pName1);
   if( z==0 ) return;
   zDb = db->mdb.zDbSName;
   pTab = sqlite3FindTable(db, z);
@@ -4326,14 +4350,29 @@ void sqlite3Reindex(Parse *pParse, Token *pName1, Token *pName2){
     sqlite3DbFree(db, z);
     return;
   }
-  pIndex = sqlite3FindIndex(db, z);
-  sqlite3DbFree(db, z);
+  if( pName2->n>0 ){
+    zTable = sqlite3NameFromToken(db, pName2);
+  }
+
+  pTab = sqlite3FindTable(db, zTable);
+  if( pTab==0 ) {
+    sqlite3ErrorMsg(pParse, "no such table: %s", zTable);
+    goto exit_reindex;
+  }
+
+  pIndex = sqlite3FindIndex(db, z, pTab);
+  
   if( pIndex ){
     sqlite3BeginWriteOperation(pParse, 0);
     sqlite3RefillIndex(pParse, pIndex, -1);
     return;
   }
+
   sqlite3ErrorMsg(pParse, "unable to identify the object to be reindexed");
+
+exit_reindex:
+  sqlite3DbFree(db, z);
+  sqlite3DbFree(db, zTable);
 }
 #endif
 
