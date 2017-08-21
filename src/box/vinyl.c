@@ -1487,7 +1487,11 @@ retry:
 		 */
 		return 0;
 	}
-	if (!vy_quota_is_exceeded(&scheduler->env->quota)) {
+	bool quota_is_exceeded = vy_quota_is_exceeded(&scheduler->env->quota);
+
+	ERROR_INJECT(ERRINJ_VY_FORCE_DUMP, { quota_is_exceeded = true; });
+
+	if (!quota_is_exceeded) {
 		/*
 		 * Memory consumption is below the watermark,
 		 * nothing to do.
@@ -3812,6 +3816,9 @@ vy_env_quota_timer_cb(ev_loop *loop, ev_timer *timer, int events)
 			    (dump_bandwidth + tx_write_rate + 1));
 
 	vy_quota_set_watermark(&e->quota, watermark);
+
+	ERROR_INJECT(ERRINJ_VY_FORCE_DUMP,
+		     { fiber_cond_signal(&e->scheduler->scheduler_cond); });
 }
 
 static struct vy_squash_queue *
@@ -3996,6 +4003,7 @@ vy_end_recovery(struct vy_env *e)
 		 * runs on recovery.
 		 */
 		vy_gc(e, e->recovery, VY_GC_INCOMPLETE, INT64_MAX);
+		e->xm->lsn = vclock_sum(e->recovery_vclock);
 		vy_recovery_delete(e->recovery);
 		e->recovery = NULL;
 		e->recovery_vclock = NULL;

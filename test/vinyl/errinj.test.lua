@@ -441,3 +441,25 @@ while wait_replace do fiber.sleep(0.01) end
 state, value = gen(param, state)
 value
 s:drop()
+
+save_lsn = box.schema.space.create('save_lsn')
+_ = save_lsn:create_index('test')
+s = box.schema.space.create('test', {engine = 'vinyl'})
+_ = s:create_index('test')
+box.snapshot()
+str = string.rep("!", 10)
+for i = 1,100 do s:replace{i} end
+errinj.set("ERRINJ_VY_FORCE_DUMP", true)
+while box.info.vinyl().memory.used ~= 0 do fiber.sleep(0.01) end
+errinj.set("ERRINJ_VY_FORCE_DUMP", false)
+
+_ = save_lsn:replace{0, box.info.vinyl().lsn}
+
+test_run:cmd("restart server default")
+save_lsn = box.space.save_lsn
+s = box.space.test
+
+save_lsn:get{0}[2] - box.info.vinyl().lsn -- 1 for replace in memtx
+
+s:drop()
+save_lsn:drop()
