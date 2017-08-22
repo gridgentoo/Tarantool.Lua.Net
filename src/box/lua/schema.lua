@@ -1055,17 +1055,20 @@ function box.schema.space.bless(space)
         check_space_arg(space, 'delete')
         return check_primary_index(space):delete(key)
     end
--- Assumes that spaceno has a TREE (NUM) primary key
--- inserts a tuple after getting the next value of the
--- primary key and returns it back to the user
     space_mt.auto_increment = function(space, tuple)
         check_space_arg(space, 'auto_increment')
-        local max_tuple = check_primary_index(space):max()
-        local max = 0
-        if max_tuple ~= nil then
-            max = max_tuple[1]
+        local pk = check_primary_index(space)
+        if #pk.parts ~= 1 or pk.parts[1].fieldno ~= 1 or
+           pk.parts[1].type ~= 'unsigned' then
+            local msg = "Space '%s' does not support auto increment"
+            msg = string.format(msg, space.name)
+            box.error(box.error.PROC_LUA, msg)
         end
-        table.insert(tuple, 1, max + 1)
+        if next(tuple) == nil then
+            tuple = box.tuple.new(nil)
+        else
+            table.insert(tuple, 1, nil)
+        end
         return space:insert(tuple)
     end
 
@@ -1241,7 +1244,9 @@ box.schema.func.create = function(name, opts)
     opts = update_param_table(opts, { setuid = false, language = 'lua'})
     opts.language = string.upper(opts.language)
     opts.setuid = opts.setuid and 1 or 0
-    _func:auto_increment{session.uid(), name, opts.setuid, opts.language}
+    local id = _func.index.primary:max()
+    id = id and id[1] + 1 or 1
+    _func:insert{id, session.uid(), name, opts.setuid, opts.language}
 end
 
 box.schema.func.drop = function(name, opts)
@@ -1334,7 +1339,9 @@ box.schema.user.create = function(name, opts)
         auth_mech_list["chap-sha1"] = box.schema.user.password(opts.password)
     end
     local _user = box.space[box.schema.USER_ID]
-    uid = _user:auto_increment{session.uid(), name, 'user', auth_mech_list}[1]
+    uid = _user.index.primary:max()
+    uid = uid and uid[1] + 1 or 1
+    _user:insert{uid, session.uid(), name, 'user', auth_mech_list}
     -- grant role 'public' to the user
     box.schema.user.grant(uid, 'public')
 end
@@ -1536,7 +1543,9 @@ box.schema.role.create = function(name, opts)
         return
     end
     local _user = box.space[box.schema.USER_ID]
-    _user:auto_increment{session.uid(), name, 'role', setmap({})}
+    uid = _user.index.primary:max()
+    uid = uid and uid[1] + 1 or 1
+    _user:insert{uid, session.uid(), name, 'role', setmap({})}
 end
 
 box.schema.role.drop = function(name, opts)

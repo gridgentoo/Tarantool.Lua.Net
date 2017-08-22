@@ -50,6 +50,8 @@ box.space._space:select{}
         'type': 'string'}]]
   - [330, 1, '_truncate', 'memtx', 0, {}, [{'name': 'id', 'type': 'unsigned'}, {'name': 'count',
         'type': 'unsigned'}]]
+  - [341, 1, '_sequence_data', 'memtx', 0, {}, [{'name': 'id', 'type': 'num'}, {'name': 'value',
+        'type': 'num'}]]
 ...
 box.space._index:select{}
 ---
@@ -87,6 +89,7 @@ box.space._index:select{}
   - [320, 0, 'primary', 'tree', {'unique': true}, [[0, 'unsigned']]]
   - [320, 1, 'uuid', 'tree', {'unique': true}, [[1, 'string']]]
   - [330, 0, 'primary', 'tree', {'unique': true}, [[0, 'unsigned']]]
+  - [341, 0, 'primary', 'hash', {'unique': true}, [[0, 'unsigned']]]
 ...
 box.space._user:select{}
 ---

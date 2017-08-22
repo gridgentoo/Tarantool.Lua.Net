@@ -92,7 +92,7 @@ _space:update({_space.id}, {{'-', 1, 2}})
 --
 -- Create a space
 --
-t = _space:auto_increment{ADMIN, 'hello', 'memtx', 0}
+t = _space:insert{_space.index.primary:max()[1] + 1, ADMIN, 'hello', 'memtx', 0}
 ---
 ...
 -- Check that a space exists
@@ -101,7 +101,7 @@ space = box.space[t[1]]
 ...
 space.id
 ---
-- 331
+- 342
 ...
 space.field_count
 ---
@@ -146,7 +146,7 @@ space_deleted
 ...
 space:replace{0}
 ---
-- error: Space '331' does not exist
+- error: Space '342' does not exist
 ...
 _index:insert{_space.id, 0, 'primary', 'tree', 1, 1, 0, 'unsigned'}
 ---
@@ -200,6 +200,7 @@ _index:select{}
   - [320, 0, 'primary', 'tree', {'unique': true}, [[0, 'unsigned']]]
   - [320, 1, 'uuid', 'tree', {'unique': true}, [[1, 'string']]]
   - [330, 0, 'primary', 'tree', {'unique': true}, [[0, 'unsigned']]]
+  - [341, 0, 'primary', 'hash', {'unique': true}, [[0, 'unsigned']]]
 ...
 -- modify indexes of a system space
 _index:delete{_index.id, 0}

@@ -170,6 +170,56 @@ request_rebind_to_primary_key(struct request *request, struct space *space,
 }
 
 static void
+request_process_auto_increment(struct request *request, struct space *space)
+{
+	const char *data = request->tuple;
+	const char *data_end = request->tuple_end;
+	uint32_t len = mp_decode_array(&data);
+	if (len < 1)
+		return;
+
+	uint64_t value;
+	size_t data_size, buf_size;
+	char *tuple, *tuple_end;
+	switch (mp_typeof(*data)) {
+	case MP_NIL:
+		/*
+		 * If the first field value is nil, it is an auto
+		 * increment request. Replace the nil with the next
+		 * sequence value.
+		 */
+		value = ++space->sequence_value;
+		mp_decode_nil(&data);
+		data_size = data_end - data;
+		buf_size = data_size + 16;
+		tuple = (char *) region_alloc_xc(&fiber()->gc, buf_size);
+		tuple_end = mp_encode_array(tuple, len);
+		tuple_end = mp_encode_uint(tuple_end, value);
+		memcpy(tuple_end, data, data_size);
+		tuple_end += data_size;
+		assert(tuple_end <= tuple + buf_size);
+		request->tuple = tuple;
+		request->tuple_end = tuple_end;
+		break;
+	case MP_UINT:
+		/*
+		 * If the first field value is greater than the
+		 * last sequence value, update the sequence to
+		 * make sure auto increment never returns a value
+		 * that is already in the space. Note, this code
+		 * is also invoked on final recovery to restore
+		 * the sequence value from WAL.
+		 */
+		value = mp_decode_uint(&data);
+		if (space->sequence_value < value)
+			space->sequence_value = value;
+		break;
+	default:
+		break;
+	}
+}
+
+static void
 process_rw(struct request *request, struct space *space, struct tuple **result)
 {
 	assert(iproto_type_is_dml(request->type));
@@ -181,6 +231,8 @@ process_rw(struct request *request, struct space *space, struct tuple **result)
 		switch (request->type) {
 		case IPROTO_INSERT:
 		case IPROTO_REPLACE:
+			if (space_supports_auto_increment(space))
+				request_process_auto_increment(request, space);
 			tuple = space->handler->executeReplace(txn, space,
 							       request);
 

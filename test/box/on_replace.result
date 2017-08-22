@@ -337,9 +337,9 @@ first:replace({0, "initial"})
 first:select()
 ---
 - - [0, 'initial']
-  - [1, 'recursive', 1]
-  - [2, 'recursive', 2]
-  - [3, 'recursive', 3]
+  - [5, 'recursive', 1]
+  - [6, 'recursive', 2]
+  - [7, 'recursive', 3]
 ...
 second:select()
 ---

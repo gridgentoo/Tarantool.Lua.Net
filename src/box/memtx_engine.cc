@@ -455,7 +455,8 @@ checkpoint_write_row(struct xlog *l, struct xrow_header *row)
 }
 
 static void
-checkpoint_write_tuple(struct xlog *l, uint32_t n, struct tuple *tuple)
+checkpoint_write_tuple(struct xlog *l, uint32_t n,
+		       const char *data, uint32_t bsize)
 {
 	struct request_replace_body body;
 	body.m_body = 0x82; /* map of two elements. */
@@ -471,15 +472,28 @@ checkpoint_write_tuple(struct xlog *l, uint32_t n, struct tuple *tuple)
 	row.bodycnt = 2;
 	row.body[0].iov_base = &body;
 	row.body[0].iov_len = sizeof(body);
-	uint32_t bsize;
-	row.body[1].iov_base = (char *) tuple_data_range(tuple, &bsize);
+	row.body[1].iov_base = (char *) data;
 	row.body[1].iov_len = bsize;
 	checkpoint_write_row(l, &row);
+}
+
+static void
+checkpoint_write_sequence(struct xlog *l, uint32_t id, uint64_t value)
+{
+	char data[64];
+	char *data_end = data;
+	data_end = mp_encode_array(data_end, 2);
+	data_end = mp_encode_uint(data_end, id);
+	data_end = mp_encode_uint(data_end, value);
+	uint32_t data_size = data_end - data;
+	assert(data_size < sizeof(data));
+	checkpoint_write_tuple(l, BOX_SEQUENCE_DATA_ID, data, data_size);
 }
 
 struct checkpoint_entry {
 	struct space *space;
 	struct iterator *iterator;
+	uint64_t sequence_value;
 	struct rlist link;
 };
 
@@ -524,7 +538,8 @@ checkpoint_destroy(struct checkpoint *ckpt)
 {
 	struct checkpoint_entry *entry;
 	rlist_foreach_entry(entry, &ckpt->entries, link) {
-		entry->iterator->free(entry->iterator);
+		if (entry->iterator != NULL)
+			entry->iterator->free(entry->iterator);
 	}
 	ckpt->entries = RLIST_HEAD_INITIALIZER(ckpt->entries);
 	xdir_destroy(&ckpt->dir);
@@ -537,8 +552,15 @@ checkpoint_add_space(struct space *sp, void *data)
 {
 	if (space_is_temporary(sp))
 		return;
-	if (!space_is_memtx(sp))
+	if (space_id(sp) == BOX_SEQUENCE_DATA_ID) {
+		/*
+		 * Since multi-engine transactions are not supported,
+		 * we cannot keep _sequence_data space up-to-date.
+		 * So we ignore its content on snapshot and write
+		 * space->sequence_data instead.
+		 */
 		return;
+	}
 	Index *pk = space_index(sp, 0);
 	if (!pk)
 		return;
@@ -547,8 +569,15 @@ checkpoint_add_space(struct space *sp, void *data)
 	entry = region_alloc_object_xc(&fiber()->gc, struct checkpoint_entry);
 	rlist_add_tail_entry(&ckpt->entries, entry, link);
 
+	/*
+	 * We only dump memtx spaces here, but we need to save
+	 * sequence value for spaces created by different engines
+	 * as well.
+	 */
 	entry->space = sp;
-	entry->iterator = pk->createSnapshotIterator();
+	entry->iterator = (!space_is_memtx(sp) ? NULL :
+			   pk->createSnapshotIterator());
+	entry->sequence_value = sp->sequence_value;
 };
 
 int
@@ -576,11 +605,18 @@ checkpoint_f(va_list ap)
 	say_info("saving snapshot `%s'", snap.filename);
 	struct checkpoint_entry *entry;
 	rlist_foreach_entry(entry, &ckpt->entries, link) {
+		if (space_supports_auto_increment(entry->space))
+			checkpoint_write_sequence(&snap, space_id(entry->space),
+						  entry->sequence_value);
 		struct tuple *tuple;
 		struct iterator *it = entry->iterator;
+		if (it == NULL)
+			continue;
 		for (tuple = it->next(it); tuple; tuple = it->next(it)) {
+			uint32_t bsize;
+			const char *data = tuple_data_range(tuple, &bsize);
 			checkpoint_write_tuple(&snap, space_id(entry->space),
-					       tuple);
+					       data, bsize);
 		}
 	}
 	xlog_flush(&snap);

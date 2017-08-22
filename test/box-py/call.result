@@ -728,7 +728,7 @@ function f(...) return box.begin(), space:auto_increment({"failed"}), box.rollba
 call f()
 ---
 - [null]
-- [3, failed]
+- [4, failed]
 
 eval (return space:select{})()
 ---

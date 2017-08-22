@@ -77,6 +77,8 @@ box.space._space:select()
         'type': 'string'}]]
   - [330, 1, '_truncate', 'memtx', 0, {}, [{'name': 'id', 'type': 'unsigned'}, {'name': 'count',
         'type': 'unsigned'}]]
+  - [341, 1, '_sequence_data', 'memtx', 0, {}, [{'name': 'id', 'type': 'num'}, {'name': 'value',
+        'type': 'num'}]]
   - [512, 1, 'distro', 'memtx', 0, {}, [{'name': 'os', 'type': 'str'}, {'name': 'dist',
         'type': 'str'}, {'name': 'version', 'type': 'num'}, {'name': 'time', 'type': 'num'}]]
   - [513, 1, 'temporary', 'memtx', 0, {'temporary': true}, []]
@@ -117,6 +119,7 @@ box.space._index:select()
   - [320, 0, 'primary', 'tree', {'unique': true}, [[0, 'unsigned']]]
   - [320, 1, 'uuid', 'tree', {'unique': true}, [[1, 'string']]]
   - [330, 0, 'primary', 'tree', {'unique': true}, [[0, 'unsigned']]]
+  - [341, 0, 'primary', 'hash', {'unique': true}, [[0, 'unsigned']]]
   - [512, 0, 'primary', 'hash', {'unique': true}, [[0, 'string'], [1, 'string'], [
         2, 'unsigned']]]
   - [512, 1, 'codename', 'hash', {'unique': true}, [[1, 'string']]]

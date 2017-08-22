@@ -66,6 +66,17 @@ local function truncate(space)
     end
 end
 
+-- space:auto_increment() doesn't work without _sequence_data
+local function auto_increment(space, tuple)
+    local max_tuple = space.index[0]:max()
+    local max = 0
+    if max_tuple ~= nil then
+        max = max_tuple[1]
+    end
+    table.insert(tuple, 1, max + 1)
+    return space:insert(tuple)
+end
+
 local function set_system_triggers(val)
     box.space._space:run_triggers(val)
     box.space._index:run_triggers(val)
@@ -85,6 +96,7 @@ local function erase()
     truncate(box.space._func)
     truncate(box.space._priv)
     truncate(box.space._truncate)
+    truncate(box.space._sequence_data)
     --truncate(box.space._schema)
     box.space._schema:delete('version')
     box.space._schema:delete('max_id')
@@ -405,7 +417,7 @@ end
 local function upgrade_users_to_1_6_8()
     if box.space._user.index.name:count({'replication'}) == 0 then
         log.info("create role replication")
-        local RPL_ID = box.space._user:auto_increment{ADMIN, 'replication', 'role'}[1]
+        local RPL_ID = auto_increment(box.space._user, {ADMIN, 'replication', 'role'})[1]
         -- replication can read the entire universe
         log.info("grant read on universe to replication")
         box.space._priv:replace{1, RPL_ID, 'universe', 0, 1}
@@ -423,7 +435,7 @@ local function upgrade_users_to_1_6_8()
     if box.space._func.index.name:count("box.schema.user.info") == 0 then
         -- create "box.schema.user.info" function
         log.info('create function "box.schema.user.info" with setuid')
-        box.space._func:auto_increment{ADMIN, 'box.schema.user.info', 1}
+        auto_increment(box.space._func, {ADMIN, 'box.schema.user.info', 1})
 
         -- grant 'public' role access to 'box.schema.user.info' function
         log.info('grant execute on function "box.schema.user.info" to public')
@@ -550,6 +562,40 @@ local function create_truncate_space()
     _priv:insert{ADMIN, PUBLIC, 'space', _truncate.id, 2}
 end
 
+local function create_sequence_space()
+    local _space = box.space[box.schema.SPACE_ID]
+    local _index = box.space[box.schema.INDEX_ID]
+    local _sequence_data = box.space[box.schema.SEQUENCE_DATA_ID]
+
+    log.info("create space _sequence_data")
+    _space:insert{_sequence_data.id, ADMIN, '_sequence_data', 'memtx', 0, setmap({}),
+                  {{name = 'id', type = 'num'}, {name = 'value', type = 'num'}}}
+
+    log.info("create index primary on _sequence_data")
+    _index:insert{_sequence_data.id, 0, 'primary', 'hash', {unique = true}, {{0, 'unsigned'}}}
+
+    for _, space in _space:pairs() do
+        local space_id = space[1]
+        local uid = space[2]
+        local space_name = space[3]
+        local engine = space[4]
+        local pk = _index:get{space_id, 0}
+        if pk ~= nil and engine ~= 'sysview' then
+            local index_id = pk[2]
+            local index_type = pk[4]
+            local index_def = pk[6]
+            if index_type == 'tree' and #index_def == 1 and
+               index_def[1][1] == 0 and index_def[1][2] == 'unsigned' then
+                log.info("init sequence for space " .. space_name)
+                local max_tuple = box.space[space_id].index[index_id]:max()
+                if max_tuple ~= nil then
+                    _sequence_data:insert{space_id, max_tuple[1]}
+                end
+            end
+        end
+    end
+end
+
 local function update_existing_users_to_1_7_5()
     local def_ids_to_update = {}
     for _, def in box.space._user:pairs() do
@@ -623,6 +669,7 @@ end
 
 local function upgrade_to_1_7_5()
     create_truncate_space()
+    create_sequence_space()
     update_space_formats_to_1_7_5()
     update_existing_users_to_1_7_5()
 end

@@ -698,6 +698,7 @@ alter_space_do(struct txn *txn, struct alter_space *alter)
 						     alter->new_space);
 
 	alter->new_space->truncate_count = alter->old_space->truncate_count;
+	alter->new_space->sequence_value = alter->old_space->sequence_value;
 	memcpy(alter->new_space->access, alter->old_space->access,
 	       sizeof(alter->old_space->access));
 	/*
@@ -837,6 +838,9 @@ DropIndex::alter(struct alter_space *alter)
 	 *   can be put back online properly.
 	 */
 	alter->new_space->handler->dropPrimaryKey(alter->new_space);
+
+	/* Reset the sequence if the primary key is deleted. */
+	alter->new_space->sequence_value = 0;
 }
 
 void
@@ -1581,7 +1585,11 @@ on_replace_dd_truncate(struct trigger * /* trigger */, void *event)
 
 	space_guard.is_active = false;
 
-	/* Preserve the access control lists during truncate. */
+	/*
+	 * Preserve the access control lists and the sequence
+	 * during truncate.
+	 */
+	new_space->sequence_value = old_space->sequence_value;
 	memcpy(new_space->access, old_space->access, sizeof(old_space->access));
 
 	/*
@@ -2323,6 +2331,30 @@ on_replace_dd_cluster(struct trigger *trigger, void *event)
 
 /* }}} cluster configuration */
 
+/**
+ * A trigger invoked on replace in space _sequence_data.
+ * Used to update space sequence value.
+ */
+static void
+on_replace_dd_sequence_data(struct trigger * /* trigger */, void *event)
+{
+	struct txn *txn = (struct txn *) event;
+	struct txn_stmt *stmt = txn_current_stmt(txn);
+	struct tuple *old_tuple = stmt->old_tuple;
+	struct tuple *new_tuple = stmt->new_tuple;
+
+	uint32_t id = tuple_field_u32_xc(new_tuple ? new_tuple : old_tuple,
+					 BOX_SEQUENCE_DATA_FIELD_ID);
+	struct space *space = space_cache_find(id);
+
+	if (new_tuple != NULL) {
+		space->sequence_value = tuple_field_u64_xc(new_tuple,
+					BOX_SEQUENCE_DATA_FIELD_VALUE);
+	} else {
+		space->sequence_value = 0;
+	}
+}
+
 static void
 unlock_after_dd(struct trigger *trigger, void *event)
 {
@@ -2377,6 +2409,10 @@ struct trigger on_replace_priv = {
 
 struct trigger on_replace_cluster = {
 	RLIST_LINK_INITIALIZER, on_replace_dd_cluster, NULL, NULL
+};
+
+struct trigger on_replace_sequence_data = {
+	RLIST_LINK_INITIALIZER, on_replace_dd_sequence_data, NULL, NULL
 };
 
 struct trigger on_stmt_begin_space = {

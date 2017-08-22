@@ -93,29 +93,6 @@ type(num) == 'number'
 type(num2) == 'number'
 num == tonumber64('125')
 num2 == tonumber64('125')
-space:truncate()
-
---
--- Tests for lua box.auto_increment with NUM keys
---
--- lua box.auto_increment() with NUM keys testing
-space:auto_increment{'a'}
-space:insert{tonumber64(5)}
-space:auto_increment{'b'}
-space:auto_increment{'c'}
-
--- gh-2258: Incomprehensive failure of auto_increment in absence of indices
-space.index.primary:drop()
-space:auto_increment{'a'}
-space:get({1})
-space:select()
-space:update({1}, {})
-space:upsert({1}, {})
-space:delete({1})
-space:bsize()
-space:count()
-space:len()
-space:pairs():totable()
 space:drop()
 
 --
@@ -220,8 +197,6 @@ space:drop()
 -- A test case for Bug #1038784
 -- transform returns wrong tuple and put broken reply into socket
 -- http://bugs.launchpad.net/tarantool/+bug/1038784
---  https://bugs.launchpad.net/tarantool/+bug/1006354
---  lua box.auto_increment() testing
 
 space = box.schema.space.create('tweedledum')
 tmp = space:create_index('primary', { type = 'tree', parts = {1, 'unsigned'}, unique = true })
@@ -240,17 +215,6 @@ push_collection(space, 5, 1038784, 'hey')
 push_collection(space, 5, 1038784, 'hey')
 push_collection(space, 5, 1038784, 'hey')
 
--- # lua box.auto_increment() testing
--- # http://bugs.launchpad.net/tarantool/+bug/1006354
---
--- Tests for lua box.auto_increment
---
-space:truncate()
-space:auto_increment{'a'}
-space:insert{5}
-space:auto_increment{'b'}
-space:auto_increment{'c'}
-space:auto_increment{'d'}
 space:drop()
 
 -- A test case for Bug #1042798

@@ -61,6 +61,8 @@ enum {
 	BOX_CLUSTER_ID = 320,
 	/** Space id of _truncate. */
 	BOX_TRUNCATE_ID = 330,
+	/** Space id of _sequence_data. */
+	BOX_SEQUENCE_DATA_ID = 341,
 	/** End of the reserved range of system spaces. */
 	BOX_SYSTEM_ID_MAX = 511,
 	BOX_ID_NIL = 2147483647
@@ -132,6 +134,12 @@ enum {
 enum {
 	BOX_TRUNCATE_FIELD_SPACE_ID = 0,
 	BOX_TRUNCATE_FIELD_COUNT = 1,
+};
+
+/** _sequence_data fields. */
+enum {
+	BOX_SEQUENCE_DATA_FIELD_ID = 0,
+	BOX_SEQUENCE_DATA_FIELD_VALUE = 1,
 };
 
 #include <stdint.h>

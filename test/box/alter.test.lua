@@ -41,7 +41,7 @@ _space:update({_space.id}, {{'-', 1, 2}})
 --
 -- Create a space
 --
-t = _space:auto_increment{ADMIN, 'hello', 'memtx', 0}
+t = _space:insert{_space.index.primary:max()[1] + 1, ADMIN, 'hello', 'memtx', 0}
 -- Check that a space exists
 space = box.space[t[1]]
 space.id

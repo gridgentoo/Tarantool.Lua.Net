@@ -78,6 +78,8 @@ struct space {
 	 * space truncation.
 	 */
 	uint64_t truncate_count;
+	/** Last sequence value. Used for auto increment. */
+	uint64_t sequence_value;
 	/** Enable/disable triggers. */
 	bool run_triggers;
 	/**
@@ -130,6 +132,19 @@ space_index(struct space *space, uint32_t id)
  */
 struct key_def *
 space_index_key_def(struct space *space, uint32_t id);
+
+/**
+ * Return true if the space supports the auto increment
+ * operation.
+ */
+static inline bool
+space_supports_auto_increment(struct space *space)
+{
+	struct key_def *key_def = space_index_key_def(space, 0);
+	return (key_def != NULL && key_def->part_count == 1 &&
+		key_def->parts[0].fieldno == 0 &&
+		key_def->parts[0].type == FIELD_TYPE_UNSIGNED);
+}
 
 /**
  * Look up the index by id.

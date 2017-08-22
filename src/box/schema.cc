@@ -308,6 +308,11 @@ schema_init()
 	 */
 	(void) sc_space_new(BOX_CLUSTER_ID, "_cluster", key_def,
 			    &on_replace_cluster, NULL);
+
+	/* _sequence_data - space id <-> last sequence value. */
+	(void) sc_space_new(BOX_SEQUENCE_DATA_ID, "_sequence_data", key_def,
+			    &on_replace_sequence_data, NULL);
+
 	free(key_def);
 	key_def = key_def_new(2); /* part count */
 	if (key_def == NULL)

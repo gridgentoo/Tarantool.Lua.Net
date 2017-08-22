@@ -653,6 +653,8 @@ box.space._space:select()
         'type': 'string'}]]
   - [330, 1, '_truncate', 'memtx', 0, {}, [{'name': 'id', 'type': 'unsigned'}, {'name': 'count',
         'type': 'unsigned'}]]
+  - [341, 1, '_sequence_data', 'memtx', 0, {}, [{'name': 'id', 'type': 'num'}, {'name': 'value',
+        'type': 'num'}]]
 ...
 box.space._func:select()
 ---
