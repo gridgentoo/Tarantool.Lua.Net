@@ -84,6 +84,7 @@ txn_stmt_new(struct txn *txn)
 	stmt->new_tuple = NULL;
 	stmt->bsize_change = 0;
 	stmt->engine_savepoint = NULL;
+	stmt->savepoints_count = 0;
 	stmt->row = NULL;
 
 	stailq_add_tail_entry(&txn->stmts, stmt, next);
@@ -104,6 +105,7 @@ txn_begin(bool is_autocommit)
 	txn->in_sub_stmt = 0;
 	txn->signature = -1;
 	txn->engine = NULL;
+	txn->savepoints_count = 0;
 	txn->engine_tx = NULL;
 	/* fiber_on_yield/fiber_on_stop initialized by engine on demand */
 	fiber_set_txn(fiber(), txn);
@@ -375,6 +377,58 @@ box_txn_alloc(size_t size)
 	};
 	return region_aligned_alloc(&fiber()->gc, size,
 	                            alignof(union natural_align));
+}
+
+int
+box_txn_savepoint()
+{
+	struct txn *txn = in_txn();
+	if (txn == NULL) {
+		diag_set(ClientError, ER_SAVEPOINT_NO_TRANSACTION);
+		return -1;
+	}
+	if (stailq_empty(&txn->stmts)) {
+		diag_set(ClientError, ER_SAVEPOINT_EMPTY_TX);
+		return -1;
+	}
+	struct txn_stmt *stmt = txn_last_stmt(txn);
+	++stmt->savepoints_count;
+	++txn->savepoints_count;
+	return 0;
+}
+
+int
+box_txn_rollback_to_savepoint()
+{
+	struct txn *txn = in_txn();
+	if (txn == NULL) {
+		diag_set(ClientError, ER_SAVEPOINT_NO_TRANSACTION);
+		return -1;
+	}
+	if (txn->savepoints_count == 0) {
+		diag_set(ClientError, ER_NO_SAVEPOINTS);
+		return -1;
+	}
+	stailq_reverse(&txn->stmts);
+	do {
+		assert(! stailq_empty(&txn->stmts));
+		struct txn_stmt *stmt =
+			stailq_first_entry(&txn->stmts, struct txn_stmt, next);
+		if (stmt->savepoints_count > 0) {
+			--stmt->savepoints_count;
+			--txn->savepoints_count;
+			break;
+		}
+		txn->engine->rollbackStatement(txn, stmt);
+		if (stmt->row != NULL) {
+			stmt->row = NULL;
+			--txn->n_rows;
+			assert(txn->n_rows >= 0);
+		}
+		stailq_shift(&txn->stmts);
+	} while (true);
+	stailq_reverse(&txn->stmts);
+	return 0;
 }
 
 } /* extern "C" */

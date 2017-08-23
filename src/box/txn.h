@@ -63,6 +63,8 @@ struct txn_stmt {
 	void *engine_savepoint;
 	/** Redo info: the binary log row */
 	struct xrow_header *row;
+	/** Count of savepoints on this statement. */
+	int savepoints_count;
 };
 
 
@@ -74,7 +76,6 @@ struct txn_stmt {
 #include "fiber.h"
 
 extern double too_long_threshold;
-struct tuple;
 
 struct txn {
 	/** List of statements in a transaction. */
@@ -95,6 +96,8 @@ struct txn {
 	Engine *engine;
 	/** Engine-specific transaction data */
 	void *engine_tx;
+	/** Count of savepoints in all statements. */
+	int savepoints_count;
 	/**
 	 * Triggers on fiber yield and stop to abort transaction
 	 * for in-memory engine.
@@ -220,20 +223,18 @@ txn_rollback_stmt();
 void
 txn_check_singlestatement(struct txn *txn, const char *where);
 
-/** The current statement of the transaction. */
-static inline struct txn_stmt *
-txn_current_stmt(struct txn *txn)
-{
-	return (txn->in_sub_stmt > 0 ?
-		stailq_last_entry(&txn->stmts, struct txn_stmt, next) :
-		NULL);
-}
-
 /** The last statement of the transaction. */
 static inline struct txn_stmt *
 txn_last_stmt(struct txn *txn)
 {
 	return stailq_last_entry(&txn->stmts, struct txn_stmt, next);
+}
+
+/** The current statement of the transaction. */
+static inline struct txn_stmt *
+txn_current_stmt(struct txn *txn)
+{
+	return stailq_empty(&txn->stmts) ? NULL : txn_last_stmt(txn);
 }
 
 #endif /* defined(__cplusplus) */
@@ -292,5 +293,22 @@ API_EXPORT void *
 box_txn_alloc(size_t size);
 
 /** \endcond public */
+
+/**
+ * Create a new savepoint. Each transaction has a stack of
+ * savepoints.
+ */
+API_EXPORT int
+box_txn_savepoint();
+
+/**
+ * Pop the newest savepoint from the stack and cancel statements,
+ * applied after the savepoint. A statement, on which the
+ * savepoint is set, is not canceled. If the savepoint is set
+ * in a trigger on newely statement, then rollback also does not
+ * cancel it.
+ */
+API_EXPORT int
+box_txn_rollback_to_savepoint();
 
 #endif /* TARANTOOL_BOX_TXN_H_INCLUDED */

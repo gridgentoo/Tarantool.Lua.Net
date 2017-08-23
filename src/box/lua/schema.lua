@@ -62,6 +62,10 @@ ffi.cdef[[
     int
     box_txn_begin();
     /** \endcond public */
+    int
+    box_txn_savepoint();
+    int
+    box_txn_rollback_to_savepoint();
 
     struct port_entry {
         struct port_entry *next;
@@ -228,6 +232,18 @@ end
 
 box.begin = function()
     if builtin.box_txn_begin() == -1 then
+        box.error()
+    end
+end
+
+box.savepoint = function()
+    if builtin.box_txn_savepoint() == -1 then
+        box.error()
+    end
+end
+
+box.rollback_to_savepoint = function()
+    if builtin.box_txn_rollback_to_savepoint() == -1 then
         box.error()
     end
 end
