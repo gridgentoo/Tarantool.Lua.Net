@@ -236,7 +236,7 @@ cbus_endpoint_create(struct cbus_endpoint *endpoint, const char *name,
 
 int
 cbus_endpoint_destroy(struct cbus_endpoint *endpoint,
-		      void (*process_cb)(struct cbus_endpoint *endpoint))
+		      int (*process_cb)(struct cbus_endpoint *endpoint))
 {
 	tt_pthread_mutex_lock(&cbus.mutex);
 	/*
@@ -444,7 +444,7 @@ cbus_flush_complete(struct cmsg *cmsg)
 
 void
 cbus_flush(struct cpipe *callee, struct cpipe *caller,
-	   void (*process_cb)(struct cbus_endpoint *endpoint))
+	   int (*process_cb)(struct cbus_endpoint *endpoint))
 {
 	struct cmsg_hop route[] = {
 		{cbus_flush_perform, caller},
@@ -508,7 +508,7 @@ void
 cbus_pair(const char *dest_name, const char *src_name,
 	  struct cpipe *dest_pipe, struct cpipe *src_pipe,
 	  void (*pair_cb)(void *), void *pair_arg,
-	  void (*process_cb)(struct cbus_endpoint *))
+	  int (*process_cb)(struct cbus_endpoint *))
 {
 	static struct cmsg_hop route[] = {
 		{cbus_pair_perform, NULL},
@@ -590,7 +590,7 @@ cbus_unpair_complete(struct cmsg *cmsg)
 void
 cbus_unpair(struct cpipe *dest_pipe, struct cpipe *src_pipe,
 	    void (*unpair_cb)(void *), void *unpair_arg,
-	    void (*process_cb)(struct cbus_endpoint *))
+	    int (*process_cb)(struct cbus_endpoint *))
 {
 	struct cmsg_hop route[] = {
 		{cbus_unpair_prepare, src_pipe},
@@ -620,22 +620,26 @@ cbus_unpair(struct cpipe *dest_pipe, struct cpipe *src_pipe,
 	cpipe_destroy(dest_pipe);
 }
 
-void
+int
 cbus_process(struct cbus_endpoint *endpoint)
 {
+	int cnt = 0;
 	struct stailq output;
 	stailq_create(&output);
 	cbus_endpoint_fetch(endpoint, &output);
 	struct cmsg *msg, *msg_next;
-	stailq_foreach_entry_safe(msg, msg_next, &output, fifo)
+	stailq_foreach_entry_safe(msg, msg_next, &output, fifo) {
 		cmsg_deliver(msg);
+		++cnt;
+	}
+	return cnt;
 }
 
 void
 cbus_loop(struct cbus_endpoint *endpoint)
 {
 	while (true) {
-		cbus_process(endpoint);
+		while (cbus_process(endpoint) > 0 && !fiber_is_cancelled());
 		if (fiber_is_cancelled())
 			break;
 		fiber_yield();

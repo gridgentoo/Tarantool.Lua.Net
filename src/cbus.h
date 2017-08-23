@@ -291,8 +291,10 @@ cbus_endpoint_create(struct cbus_endpoint *endpoint, const char *name,
 		     void (*fetch_cb)(ev_loop *, struct ev_watcher *, int), void *fetch_data);
 
 /**
- * One round for message fetch and deliver */
-void
+ * One round for message fetch and deliver.
+ * @retval >= 0 count of delievered messages
+ */
+int
 cbus_process(struct cbus_endpoint *endpoint);
 
 /**
@@ -316,7 +318,7 @@ cbus_stop_loop(struct cpipe *pipe);
  */
 int
 cbus_endpoint_destroy(struct cbus_endpoint *endpoint,
-		      void (*process_cb)(struct cbus_endpoint *));
+		      int (*process_cb)(struct cbus_endpoint *));
 
 /**
  * A helper method to invoke a function on the other side of the
@@ -377,7 +379,7 @@ cbus_call(struct cpipe *callee, struct cpipe *caller,
  */
 void
 cbus_flush(struct cpipe *callee, struct cpipe *caller,
-	   void (*process_cb)(struct cbus_endpoint *));
+	   int (*process_cb)(struct cbus_endpoint *));
 
 /**
  * Create a two-way channel between existing cbus endpoints.
@@ -404,7 +406,7 @@ void
 cbus_pair(const char *dest_name, const char *src_name,
 	  struct cpipe *dest_pipe, struct cpipe *src_pipe,
 	  void (*pair_cb)(void *), void *pair_arg,
-	  void (*process_cb)(struct cbus_endpoint *));
+	  int (*process_cb)(struct cbus_endpoint *));
 
 /**
  * Destroy a two-way channel between cbus endpoints.
@@ -433,7 +435,7 @@ cbus_pair(const char *dest_name, const char *src_name,
 void
 cbus_unpair(struct cpipe *dest_pipe, struct cpipe *src_pipe,
 	    void (*unpair_cb)(void *), void *unpair_arg,
-	    void (*process_cb)(struct cbus_endpoint *));
+	    int (*process_cb)(struct cbus_endpoint *));
 
 #if defined(__cplusplus)
 } /* extern "C" */

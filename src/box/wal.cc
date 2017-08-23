@@ -943,7 +943,7 @@ wal_watcher_detach(void *arg)
 void
 wal_set_watcher(struct wal_watcher *watcher, const char *name,
 		void (*watcher_cb)(struct wal_watcher *, unsigned events),
-		void (*process_cb)(struct cbus_endpoint *))
+		int (*process_cb)(struct cbus_endpoint *))
 {
 	assert(journal_is_initialized(&wal_writer_singleton.base));
 
@@ -964,7 +964,7 @@ wal_set_watcher(struct wal_watcher *watcher, const char *name,
 
 void
 wal_clear_watcher(struct wal_watcher *watcher,
-		  void (*process_cb)(struct cbus_endpoint *))
+		  int (*process_cb)(struct cbus_endpoint *))
 {
 	assert(journal_is_initialized(&wal_writer_singleton.base));
 

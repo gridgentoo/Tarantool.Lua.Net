@@ -124,7 +124,7 @@ struct wal_watcher {
 void
 wal_set_watcher(struct wal_watcher *watcher, const char *name,
 		void (*watcher_cb)(struct wal_watcher *, unsigned events),
-		void (*process_cb)(struct cbus_endpoint *));
+		int (*process_cb)(struct cbus_endpoint *));
 
 /**
  * Unsubscribe from WAL events.
@@ -136,7 +136,7 @@ wal_set_watcher(struct wal_watcher *watcher, const char *name,
  */
 void
 wal_clear_watcher(struct wal_watcher *watcher,
-		  void (*process_cb)(struct cbus_endpoint *));
+		  int (*process_cb)(struct cbus_endpoint *));
 
 void
 wal_atfork();
