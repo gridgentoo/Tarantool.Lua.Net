@@ -52,6 +52,10 @@ cfg_filter(box.cfg)
     - false
   - - readahead
     - 16320
+  - - replication_ack_interval
+    - 1
+  - - replication_reconnect_delay
+    - 1
   - - replication_timeout
     - 10
   - - rows_per_wal

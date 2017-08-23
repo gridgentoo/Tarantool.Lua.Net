@@ -53,6 +53,8 @@ local default_cfg = {
     checkpoint_count    = 2,
     worker_pool_threads = 4,
     replication_timeout = 10,
+    replication_reconnect_delay = 1,
+    replication_ack_interval = 1,
 }
 
 -- types of available options
@@ -103,6 +105,8 @@ local template_cfg = {
     hot_standby         = 'boolean',
     worker_pool_threads = 'number',
     replication_timeout = 'number',
+    replication_reconnect_delay = 'number',
+    replication_ack_interval = 'number',
 }
 
 local function normalize_uri(port)
@@ -168,6 +172,8 @@ local dynamic_cfg = {
     end,
     force_recovery          = function() end,
     replication_timeout     = function() end,
+    replication_reconnect_delay = function() end,
+    replication_ack_interval = function() end,
 }
 
 local dynamic_cfg_skip_at_load = {
