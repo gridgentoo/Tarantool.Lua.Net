@@ -324,7 +324,7 @@ static const sqlite3_api_routines sqlite3Apis = {
   sqlite3_uri_int64,
   sqlite3_uri_parameter,
   sqlite3_vsnprintf,
-  sqlite3_wal_checkpoint_v2,
+  0,
   /* Version 3.8.7 and later */
   sqlite3_auto_extension,
   sqlite3_bind_blob64,

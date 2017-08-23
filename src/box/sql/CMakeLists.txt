@@ -8,8 +8,6 @@ option(SQL_MAINTAINER_MODE "Regenerate parser and opcodes for SQL compiler" OFF)
 
 add_definitions(-Wno-pointer-sign -Wno-error)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -w")
-
 set(SRCDIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories(${SRCDIR})

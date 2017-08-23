@@ -486,6 +486,8 @@
 ** in theory, be used by the compiler to generate better code, but
 ** currently they are just comments for human readers.
 */
+#undef likely /* temporary crutch against redefite warning */
+#undef unlikely /* temporary crutch against redefite warning */
 #define likely(X)    (X)
 #define unlikely(X)  (X)
 
@@ -607,6 +609,7 @@
 /*
 ** Swap two objects of type TYPE.
 */
+#undef SWAP /* temporary crutch against redefite warning */
 #define SWAP(TYPE,A,B) {TYPE t=A; A=B; B=t;}
 
 /*
@@ -3387,7 +3390,7 @@ int sqlite3CantopenError(int);
 ** Internal function prototypes
 */
 int sqlite3StrICmp(const char*,const char*);
-int sqlite3Strlen30(const char*);
+unsigned sqlite3Strlen30(const char *);
 char *sqlite3ColumnType(Column*,char*);
 #define sqlite3StrNICmp sqlite3_strnicmp
 
@@ -3500,7 +3503,7 @@ char *sqlite3VMPrintf(sqlite3*,const char*, va_list);
   void sqlite3TreeViewBareExprList(TreeView*, const ExprList*, const char*);
   void sqlite3TreeViewExprList(TreeView*, const ExprList*, u8, const char*);
   void sqlite3TreeViewSelect(TreeView*, const Select*, u8);
-  void sqlite3TreeViewWith(TreeView*, const With*, u8);
+  void sqlite3TreeViewWith(TreeView *, const With *);
 #endif
 
 
@@ -3951,7 +3954,7 @@ char sqlite3AffinityType(const char*, u8*);
 void sqlite3Analyze(Parse*, Token*, Token*);
 int sqlite3InvokeBusyHandler(BusyHandler*);
 int sqlite3FindDb(sqlite3*, Token*);
-int sqlite3FindDbName(sqlite3 *, const char *);
+int sqlite3FindDbName(const char *);
 int sqlite3AnalysisLoad(sqlite3*);
 void sqlite3DeleteIndexSamples(sqlite3*,Index*);
 void sqlite3DefaultRowEst(Index*);
@@ -4072,7 +4075,7 @@ void sqlite3VtabArgInit(Parse*);
 void sqlite3VtabArgExtend(Parse*, Token*);
 int sqlite3VtabCallCreate(sqlite3*, int, const char *, char **);
 int sqlite3VtabCallConnect(Parse*, Table*);
-int sqlite3VtabCallDestroy(sqlite3*, int, const char *);
+int sqlite3VtabCallDestroy(sqlite3 *, const char *);
 int sqlite3VtabBegin(sqlite3 *, Vdbe *, VTable *);
 FuncDef *sqlite3VtabOverloadFunction(sqlite3 *,FuncDef*, int nArg, Expr*);
 void sqlite3InvalidFunction(sqlite3_context*,int,sqlite3_value**);

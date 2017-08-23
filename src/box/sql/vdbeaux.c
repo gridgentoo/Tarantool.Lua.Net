@@ -12,6 +12,7 @@
 ** This file contains code used for creating, destroying, and populating
 ** a VDBE (or an "sqlite3_stmt" as it is known to the outside world.) 
 */
+#include <box/txn.h>
 #include "sqliteInt.h"
 #include "btreeInt.h"
 #include "vdbeInt.h"
@@ -128,7 +129,7 @@ static int growOpArray(Vdbe *v, int nOp){
   UNUSED_PARAMETER(nOp);
 #endif
 
-  assert( nOp<=(1024/sizeof(Op)) );
+  assert( (unsigned)nOp<=(1024/sizeof(Op)) );
   assert( nNew>=(p->nOpAlloc+nOp) );
   pNew = sqlite3DbRealloc(p->db, v->aOp, nNew*sizeof(Op));
   if( pNew ){
@@ -1456,10 +1457,9 @@ void sqlite3VdbeUsesBtree(Vdbe *p){
 ** be a problem.
 */
 void sqlite3VdbeEnter(Vdbe *p){
-  int i;
+  int i = 0;
   sqlite3 *db;
   Db *aDb;
-  int nDb;
   if( DbMaskAllZero(p->lockMask) ) return;  /* The common case */
   db = p->db;
   aDb = &db->mdb;
@@ -1474,10 +1474,9 @@ void sqlite3VdbeEnter(Vdbe *p){
 ** Unlock all of the btrees previously locked by a call to sqlite3VdbeEnter().
 */
 static SQLITE_NOINLINE void vdbeLeave(Vdbe *p){
-  int i;
+  int i = 0;
   sqlite3 *db;
   Db *aDb;
-  int nDb;
   db = p->db;
   aDb = &db->mdb;
   if( DbMaskTest(p->lockMask,0) && ALWAYS(aDb->pBt!=0) ){
@@ -2178,7 +2177,6 @@ static void Cleanup(Vdbe *p){
 ** be called on an SQL statement before sqlite3_step().
 */
 void sqlite3VdbeSetNumCols(Vdbe *p, int nResColumn){
-  Mem *pColName;
   int n;
   sqlite3 *db = p->db;
 
@@ -2186,7 +2184,7 @@ void sqlite3VdbeSetNumCols(Vdbe *p, int nResColumn){
   sqlite3DbFree(db, p->aColName);
   n = nResColumn*COLNAME_N;
   p->nResColumn = (u16)nResColumn;
-  p->aColName = pColName = (Mem*)sqlite3DbMallocRawNN(db, sizeof(Mem)*n );
+  p->aColName = (Mem*)sqlite3DbMallocRawNN(db, sizeof(Mem) * n );
   if( p->aColName==0 ) return;
   initMemArray(p->aColName, n, p->db, MEM_Null);
 }
@@ -2230,7 +2228,6 @@ int sqlite3VdbeSetColName(
 ** takes care of the master journal trickery.
 */
 static int vdbeCommit(sqlite3 *db, Vdbe *p){
-  int i;
   int nTrans = 0;  /* Number of databases with an active write-transaction
                    ** that are candidates for a two-phase commit using a
                    ** master-journal */
@@ -2571,7 +2568,6 @@ int sqlite3VdbeCloseStatement(Vdbe *p, int eOp){
 */
 #ifndef SQLITE_OMIT_FOREIGN_KEY
 int sqlite3VdbeCheckFk(Vdbe *p, int deferred){
-  sqlite3 *db = p->db;
   if( (deferred && (p->nDeferredCons+p->nDeferredImmCons)>0) 
    || (!deferred && p->nFkConstraint>0) 
   ){
@@ -4495,7 +4491,7 @@ int sqlite3VdbeCompareMsgpack(
     }
     case MP_BOOL: {
       assert( (unsigned)*aKey1==0xc2 || (unsigned)*aKey1==0xc3 );
-      mem1.u.i = (unsigned)aKey1++ - 0xc2;
+      mem1.u.i = (unsigned)(size_t)aKey1++ - 0xc2;
       goto do_int;
     }
     case MP_UINT: {
