@@ -219,6 +219,9 @@ relay_final_join(int fd, uint64_t sync, struct vclock *start_vclock,
 	});
 }
 
+static void
+relay_send_status(struct relay *relay);
+
 /**
  * The message which updated tx thread with a new vclock has returned back
  * to the relay.
@@ -227,6 +230,14 @@ static void
 relay_status_update(struct cmsg *msg)
 {
 	msg->route = NULL;
+	struct relay_status_msg *status = (struct relay_status_msg *)msg;
+	struct relay *relay = status->relay;
+	/* Check if status is not outdated. */
+	if ((relay->version_id < version_id(1, 7, 4) &&
+	    vclock_compare(&relay->status_msg.vclock, &relay->r->vclock) != 0) ||
+	    (relay->version_id >= version_id(1, 7, 4) &&
+	    vclock_compare(&relay->status_msg.vclock, &relay->recv_vclock) != 0))
+		relay_send_status(status->relay);
 }
 
 /**
