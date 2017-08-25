@@ -313,7 +313,6 @@ int sqlite3_shutdown(void){
     SQLITE_EXTRA_SHUTDOWN();
 #endif
     sqlite3_os_end();
-    sqlite3_reset_auto_extension();
     sqlite3GlobalConfig.isInit = 0;
   }
   if( sqlite3GlobalConfig.isPCacheInit ){
@@ -803,7 +802,6 @@ int sqlite3_db_config(sqlite3 *db, int op, ...){
         { SQLITE_DBCONFIG_ENABLE_FKEY,           SQLITE_ForeignKeys    },
         { SQLITE_DBCONFIG_ENABLE_TRIGGER,        SQLITE_EnableTrigger  },
         { SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER, SQLITE_Fts3Tokenizer  },
-        { SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION, SQLITE_LoadExtension  },
         { SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,      SQLITE_NoCkptOnClose  },
       };
       unsigned int i;
@@ -2585,17 +2583,6 @@ static int openDatabase(
     rc = sqlite3Fts5Init(db);
   }
 #endif
-
-  /* Load automatic extensions - extensions that have been registered
-  ** using the sqlite3_automatic_extension() API.
-  */
-  if( rc==SQLITE_OK ){
-    sqlite3AutoLoadExtensions(db);
-    rc = sqlite3_errcode(db);
-    if( rc!=SQLITE_OK ){
-      goto opendb_out;
-    }
-  }
 
 #ifdef SQLITE_ENABLE_FTS1
   if( !db->mallocFailed ){

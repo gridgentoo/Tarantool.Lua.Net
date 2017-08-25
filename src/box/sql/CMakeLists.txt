@@ -50,7 +50,6 @@ add_library(sql STATIC
     hash.c
     insert.c
     legacy.c
-    loadext.c
     main.c
     malloc.c
     mem0.c

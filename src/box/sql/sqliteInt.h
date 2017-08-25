@@ -1411,8 +1411,6 @@ struct sqlite3 {
 #define SQLITE_ForeignKeys    0x00080000  /* Enforce foreign key constraints  */
 #define SQLITE_AutoIndex      0x00100000  /* Enable automatic indexes */
 #define SQLITE_PreferBuiltin  0x00200000  /* Preference to built-in funcs */
-#define SQLITE_LoadExtension  0x00400000  /* Enable load_extension */
-#define SQLITE_LoadExtFunc    0x00800000  /* Enable load_extension() SQL func */
 #define SQLITE_EnableTrigger  0x01000000  /* True to enable triggers */
 #define SQLITE_DeferFKs       0x02000000  /* Defer all FK constraints */
 #define SQLITE_QueryOnly      0x04000000  /* Disable database changes */
@@ -4015,13 +4013,6 @@ void sqlite3ParserFree(void*, void(*)(void*));
 void sqlite3Parser(void*, int, Token, Parse*);
 #ifdef YYTRACKMAXSTACKDEPTH
   int sqlite3ParserStackPeak(void*);
-#endif
-
-void sqlite3AutoLoadExtensions(sqlite3*);
-#ifndef SQLITE_OMIT_LOAD_EXTENSION
-  void sqlite3CloseExtensions(sqlite3*);
-#else
-# define sqlite3CloseExtensions(X)
 #endif
 
 #ifndef SQLITE_OMIT_SHARED_CACHE
