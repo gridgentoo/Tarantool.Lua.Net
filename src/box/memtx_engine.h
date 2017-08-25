@@ -75,9 +75,8 @@ struct MemtxEngine: public Engine {
 		    uint64_t tuple_arena_max_size,
 		    uint32_t objsize_min, float alloc_factor);
 	~MemtxEngine();
-	virtual Handler *createSpace(struct rlist *key_list,
-				     uint32_t index_count,
-				     uint32_t exact_field_count) override;
+	virtual void createSpace(struct space *space,
+				 struct rlist *key_list) override;
 	virtual void begin(struct txn *txn) override;
 	virtual void rollbackStatement(struct txn *,
 				       struct txn_stmt *stmt) override;

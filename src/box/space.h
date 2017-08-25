@@ -76,6 +76,10 @@ struct space {
 	/** Space meta. */
 	struct space_def *def;
 	/**
+	 * Format of a tuples, accumulated from index key defs.
+	 */
+	struct tuple_format *format;
+	/**
 	 * Number of times the space has been truncated.
 	 * Updating this counter via _truncate space triggers
 	 * space truncation.

@@ -282,27 +282,25 @@ MemtxEngine::endRecovery()
 	}
 }
 
-Handler *MemtxEngine::createSpace(struct rlist *key_list,
-				  uint32_t index_count,
-				  uint32_t exact_field_count)
+void MemtxEngine::createSpace(struct space *space, struct rlist *key_list)
 {
 	struct index_def *index_def;
 	uint32_t key_no = 0;
 	struct key_def **keys =
 		(struct key_def **)region_alloc_xc(&fiber()->gc,
-						   sizeof(*keys) * index_count);
+						   sizeof(*keys) *
+						   space->index_count);
 
 	rlist_foreach_entry(index_def, key_list, link)
-			keys[key_no++] = index_def->key_def;
+		keys[key_no++] = index_def->key_def;
 
-	struct tuple_format *format =
-		tuple_format_new(&memtx_tuple_format_vtab, keys, index_count, 0);
-	if (format == NULL)
+	space->format = tuple_format_new(&memtx_tuple_format_vtab, keys,
+					 space->index_count, 0);
+	if (space->format == NULL)
 		diag_raise();
-	tuple_format_ref(format);
-	format->exact_field_count = exact_field_count;
-	auto format_guard = make_scoped_guard([=] { tuple_format_unref(format); });
-	return new MemtxSpace(this, format);
+	tuple_format_ref(space->format);
+	space->format->exact_field_count = space->def->exact_field_count;
+	space->handler = new MemtxSpace(this, space->format);
 }
 
 void

@@ -113,13 +113,9 @@ SysviewEngine::SysviewEngine()
 {
 }
 
-Handler *SysviewEngine::createSpace(struct rlist *key_list,
-				    uint32_t index_count,
-				    uint32_t exact_field_count)
+void SysviewEngine::createSpace(struct space *space, struct rlist *key_list)
 {
 	(void) key_list;
-	(void) index_count;
-	(void) exact_field_count;
-	return new SysviewSpace(this);
+	space->handler = new SysviewSpace(this);
 }
 

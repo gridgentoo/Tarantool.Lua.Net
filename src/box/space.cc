@@ -110,8 +110,7 @@ space_new(struct space_def *def, struct rlist *key_list)
 				      index_count * sizeof(Index *));
 	Engine *engine = engine_find(def->engine_name);
 	/* init space engine instance */
-	space->handler = engine->createSpace(key_list, index_count,
-					     def->exact_field_count);
+	engine->createSpace(space, key_list);
 	rlist_foreach_entry(index_def, key_list, link) {
 		space->index_map[index_def->iid] =
 			space->handler->createIndex(space, index_def);
@@ -125,6 +124,8 @@ space_new(struct space_def *def, struct rlist *key_list)
 void
 space_delete(struct space *space)
 {
+	if (space->format != NULL)
+		tuple_format_unref(space->format);
 	for (uint32_t j = 0; j <= space->index_id_max; j++) {
 		Index *index = space->index_map[j];
 		if (index)
