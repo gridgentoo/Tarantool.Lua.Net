@@ -92,3 +92,28 @@ test_run:cmd("start server default")
 test_run:cmd("switch default")
 test_run:cmd("stop server replica")
 test_run:cmd("cleanup server replica")
+
+box.schema.user.grant("guest", "replication")
+errinj = box.error.injection
+errinj.set("ERRINJ_RELAY_EXIT_DELAY", 0.01)
+
+test_run:cmd("start server replica")
+
+
+test_run:cmd("switch replica")
+fiber = require('fiber')
+old_repl = box.cfg.replication
+-- shutdown applier
+box.cfg{replication = {}}
+while box.info.replication[1].upstream ~= nil do fiber.sleep(0.0001) end
+-- reconnect
+box.cfg{replication = {old_repl}}
+while box.info.replication[1].upstream.status ~= 'disconnected' do fiber.sleep(0.0001) end
+while box.info.replication[1].upstream.status ~= 'follow' do fiber.sleep(0.0001) end
+
+test_run:cmd("stop server default")
+test_run:cmd("deploy server default")
+test_run:cmd("start server default")
+test_run:cmd("switch default")
+test_run:cmd("stop server replica")
+test_run:cmd("cleanup server replica")
