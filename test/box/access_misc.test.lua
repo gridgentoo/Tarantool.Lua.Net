@@ -1,4 +1,5 @@
 session = box.session
+utils = require('utils')
 --
 -- Check a double create space
 --
@@ -141,7 +142,7 @@ session.su('testuser')
 testuser_uid = session.uid()
 box.space._user:delete(2)
 box.space._user:select(1)
-uid = box.space._user:insert{maxuid+1, session.uid(), 'someone', 'user'}[1]
+uid = box.space._user:insert{maxuid+1, session.uid(), 'someone', 'user', utils.setmap({})}[1]
 box.space._user:delete(uid)
 
 session.su('admin')

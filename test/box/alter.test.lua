@@ -4,26 +4,27 @@ ADMIN = 1
 env = require('test_run')
 test_run = env.new()
 test_run:cmd("push filter ', .lsn.: [0-9]+' to ''")
+utils = require('utils')
 --
 -- Test insertion into a system space - verify that
 -- mandatory fields are required.
 --
-_space:insert{_space.id, ADMIN, 'test', 5 }
+_space:insert{_space.id, ADMIN, 'test', 'memtx', 0, utils.setmap({}), {}}
 --
 -- Bad space id
 --
-_space:insert{'hello', 'world', 'test'}
+_space:insert{'hello', 'world', 'test', 'memtx', 0, utils.setmap({}), {}}
 --
 -- Can't create a space which has wrong field count - field_count must be NUM
 --
-_space:insert{_space.id, ADMIN, 'test', 'world'}
+_space:insert{_space.id, ADMIN, 'test', 'world', 0, utils.setmap({}), {}}
 --
 -- There is already a tuple for the system space
 --
-_space:insert{_space.id, ADMIN, '_space', 'memtx', 0}
-_space:replace{_space.id, ADMIN, '_space', 'memtx', 0}
-_space:insert{_index.id, ADMIN, '_index', 'memtx', 0}
-_space:replace{_index.id, ADMIN, '_index', 'memtx', 0}
+_space:insert{_space.id, ADMIN, '_space', 'memtx', 0, utils.setmap({}), {}}
+_space:replace{_space.id, ADMIN, '_space', 'memtx', 0, utils.setmap({}), {}}
+_space:insert{_index.id, ADMIN, '_index', 'memtx', 0, utils.setmap({}), {}}
+_space:replace{_index.id, ADMIN, '_index', 'memtx', 0, utils.setmap({}), {}}
 --
 -- Can't change properties of a space
 --
@@ -77,8 +78,9 @@ _index:run_triggers(false)
 _space:run_triggers(false)
 box.snapshot()
 test_run:cmd("restart server default with cleanup=1")
+utils = require('utils')
 ADMIN = 1
-box.space['_space']:insert{1000, ADMIN, 'test', 'memtx', 0}
+box.space['_space']:insert{1000, ADMIN, 'test', 'memtx', 0, utils.setmap({}), {}}
 box.space[1000].id
 box.space['_space']:delete{1000}
 box.space[1000]
