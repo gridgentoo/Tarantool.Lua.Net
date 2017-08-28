@@ -5,11 +5,11 @@
 box.cfg{ rows_per_wal = 5 }
 box.schema.space.create("distro")
 box.space.distro:create_index('primary', { type = 'hash', unique = true,
-    parts = {1, 'str', 2, 'str', 3, 'num'}})
+    parts = {1, 'string', 2, 'string', 3, 'unsigned'}})
 box.space.distro:create_index('codename', { type = 'hash', unique = true,
-    parts = {2, 'str'}})
+    parts = {2, 'string'}})
 box.space.distro:create_index('time', { type = 'tree', unique = false,
-    parts = {4, 'num'}})
+    parts = {4, 'unsigned'}})
 
 local function d(year, month, day)
     return os.time { year = year, month = month, day = day }
@@ -30,10 +30,10 @@ box.space.distro:insert({'ubuntu', 'precise', 1510, d(2012, 4, 26)})
 -- 1.6.5+
 if box.space.distro.format ~= nil then
     local format={}
-    format[1] = {name='os', type='str'}
-    format[2] = {name='dist', type='str'}
-    format[3] = {name='version', type='num'}
-    format[4] = {name='time', type='num'}
+    format[1] = {name='os', type='string'}
+    format[2] = {name='dist', type='string'}
+    format[3] = {name='version', type='unsigned'}
+    format[4] = {name='time', type='unsigned'}
     box.space.distro:format(format)
 end
 
