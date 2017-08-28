@@ -115,7 +115,8 @@ err:
 }
 
 static int
-opt_set(void *opts, const struct opt_def *def, const char **val)
+opt_set(void *opts, const struct opt_def *def, const char **val,
+	struct region *region)
 {
 	int64_t ival;
 	double dval;
@@ -152,9 +153,7 @@ opt_set(void *opts, const struct opt_def *def, const char **val)
 			return -1;
 		str = mp_decode_str(val, &str_len);
 		if (str_len > 0) {
-			ptr = (char *)malloc(str_len + 1);
-			if (ptr == NULL)
-				tnt_raise(OutOfMemory, str_len, "malloc", "ptr");
+			ptr = (char *) region_alloc_xc(region, str_len + 1);
 			memcpy(ptr, str, str_len);
 			ptr[str_len] = '\0';
 			assert (strlen(ptr) == str_len);
@@ -194,7 +193,7 @@ opt_set(void *opts, const struct opt_def *def, const char **val)
 static void
 opts_parse_key(void *opts, const struct opt_def *reg, const char *key,
 	       uint32_t key_len, const char **data, uint32_t errcode,
-	       uint32_t field_no)
+	       uint32_t field_no, struct region *region)
 {
 	char errmsg[DIAG_ERRMSG_MAX];
 	bool found = false;
@@ -203,7 +202,7 @@ opts_parse_key(void *opts, const struct opt_def *reg, const char *key,
 		    memcmp(key, def->name, key_len) != 0)
 			continue;
 
-		if (opt_set(opts, def, data) != 0) {
+		if (opt_set(opts, def, data, region) != 0) {
 			snprintf(errmsg, sizeof(errmsg), "'%.*s' must be %s",
 				 key_len, key, opt_type_strs[def->type]);
 			tnt_raise(ClientError, errcode, field_no, errmsg);
@@ -226,7 +225,8 @@ opts_parse_key(void *opts, const struct opt_def *reg, const char *key,
  */
 static const char *
 opts_create_from_field(void *opts, const struct opt_def *reg, const char *map,
-		       uint32_t errcode, uint32_t field_no)
+		       uint32_t errcode, uint32_t field_no,
+		       struct region *region)
 {
 	if (mp_typeof(*map) == MP_NIL)
 		return map;
@@ -247,7 +247,7 @@ opts_create_from_field(void *opts, const struct opt_def *reg, const char *map,
 		uint32_t key_len;
 		const char *key = mp_decode_str(&map, &key_len);
 		opts_parse_key(opts, reg, key, key_len, &map, errcode,
-			       field_no);
+			       field_no, region);
 	}
 	return map;
 }
@@ -259,16 +259,26 @@ opts_create_from_field(void *opts, const struct opt_def *reg, const char *map,
  * @return  the end of the map in the msgpack stream
  */
 static const char *
-index_opts_create(struct index_opts *opts, const char *map)
+index_opts_create(struct index_opts *opts, const char *map,
+		  struct region *region)
 {
 	*opts = index_opts_default;
 	map = opts_create_from_field(opts, index_opts_reg, map,
 				     ER_WRONG_INDEX_OPTIONS,
-				     BOX_INDEX_FIELD_OPTS);
+				     BOX_INDEX_FIELD_OPTS, region);
 	if (opts->distance == rtree_index_distance_type_MAX) {
 		tnt_raise(ClientError, ER_WRONG_INDEX_OPTIONS,
 			  BOX_INDEX_FIELD_OPTS, "distance must be either "\
 			  "'euclid' or 'manhattan'");
+	}
+	if (opts->sql != NULL) {
+		char *sql = strdup(opts->sql);
+		if (sql == NULL) {
+			opts->sql = NULL;
+			tnt_raise(OutOfMemory, strlen(opts->sql) + 1, "strdup",
+				  "sql");
+		}
+		opts->sql = sql;
 	}
 	if (opts->run_count_per_level <= 0)
 		tnt_raise(ClientError, ER_WRONG_INDEX_OPTIONS,
@@ -311,7 +321,8 @@ index_def_new_from_tuple(struct tuple *tuple, struct space *old_space)
 			  tt_cstr(name, BOX_INVALID_NAME_MAX),
 			  space_name(old_space), "index name is too long");
 	}
-	index_opts_create(&opts, tuple_field(tuple, BOX_INDEX_FIELD_OPTS));
+	index_opts_create(&opts, tuple_field(tuple, BOX_INDEX_FIELD_OPTS),
+			  &fiber()->gc);
 	struct index_opts *opts_p = &opts;
 	auto opts_guard = make_scoped_guard([=] { index_opts_destroy(opts_p); });
 	const char *parts = tuple_field(tuple, BOX_INDEX_FIELD_PARTS);
@@ -339,7 +350,8 @@ index_def_new_from_tuple(struct tuple *tuple, struct space *old_space)
  * tuple).
  */
 static void
-space_opts_create(struct space_opts *opts, struct tuple *tuple)
+space_opts_create(struct space_opts *opts, struct tuple *tuple,
+		  struct region *region)
 {
 	/* default values of opts */
 	*opts = space_opts_default;
@@ -350,7 +362,17 @@ space_opts_create(struct space_opts *opts, struct tuple *tuple)
 
 	const char *data = tuple_field(tuple, BOX_SPACE_FIELD_OPTS);
 	opts_create_from_field(opts, space_opts_reg, data,
-			       ER_WRONG_SPACE_OPTIONS, BOX_SPACE_FIELD_OPTS);
+			       ER_WRONG_SPACE_OPTIONS, BOX_SPACE_FIELD_OPTS,
+			       region);
+	if (opts->sql != NULL) {
+		char *sql = strdup(opts->sql);
+		if (sql == NULL) {
+			opts->sql = NULL;
+			tnt_raise(OutOfMemory, strlen(opts->sql) + 1, "strdup",
+				  "sql");
+		}
+		opts->sql = sql;
+	}
 }
 
 /**
@@ -360,6 +382,7 @@ extern "C" struct space_def *
 space_def_new_from_tuple(struct tuple *tuple, uint32_t errcode)
 {
 	uint32_t name_len;
+	struct region *region = &fiber()->gc;
 	const char *name =
 		tuple_field_str_xc(tuple, BOX_SPACE_FIELD_NAME, &name_len);
 	if (name_len > BOX_NAME_MAX)
@@ -399,7 +422,7 @@ space_def_new_from_tuple(struct tuple *tuple, uint32_t errcode)
 	memcpy(def->engine_name, engine_name, name_len);
 	def->engine_name[name_len] = 0;
 	identifier_check_xc(def->engine_name);
-	space_opts_create(&def->opts, tuple);
+	space_opts_create(&def->opts, tuple, region);
 	Engine *engine = engine_find(def->engine_name);
 	engine->checkSpaceDef(def);
 	access_check_ddl(def->uid, SC_SPACE);
