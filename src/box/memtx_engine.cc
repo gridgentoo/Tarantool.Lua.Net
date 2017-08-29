@@ -282,7 +282,8 @@ MemtxEngine::endRecovery()
 	}
 }
 
-void MemtxEngine::createSpace(struct space *space, struct rlist *key_list)
+void MemtxEngine::createSpace(struct space *space, struct rlist *key_list,
+			      struct field_def *fields, uint32_t field_count)
 {
 	struct index_def *index_def;
 	uint32_t key_no = 0;
@@ -295,7 +296,8 @@ void MemtxEngine::createSpace(struct space *space, struct rlist *key_list)
 		keys[key_no++] = index_def->key_def;
 
 	space->format = tuple_format_new(&memtx_tuple_format_vtab, keys,
-					 space->index_count, 0);
+					 space->index_count, 0, fields,
+					 field_count);
 	if (space->format == NULL)
 		diag_raise();
 	tuple_format_ref(space->format);

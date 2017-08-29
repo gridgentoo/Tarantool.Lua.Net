@@ -745,3 +745,80 @@ box.space._space:replace{600, 1, 'test', 'memtx', 0, { sql = 100 }, {}}
 ---
 - error: 'Wrong space options (field 5): ''sql'' must be string'
 ...
+--
+-- gh-2652: validate space format.
+--
+s = box.schema.space.create('test', { format = "format" })
+---
+- error: Illegal parameters, options parameter 'format' should be of type table
+...
+s = box.schema.space.create('test', { format = { "not_map" } })
+---
+- error: 'Failed to create space ''test'': 1-th field is not map'
+...
+format = { utils.setmap({'unsigned'}) }
+---
+...
+s = box.schema.space.create('test', { format = format })
+---
+- error: 'Failed to create space ''test'': 1-th field format is not map with string
+    keys'
+...
+format = { { name = 100 } }
+---
+...
+s = box.schema.space.create('test', { format = format })
+---
+- error: 'Wrong space format (field 1): ''name'' must be string'
+...
+long = string.rep('a', box.schema.NAME_MAX + 1)
+---
+...
+format = { { name = long } }
+---
+...
+s = box.schema.space.create('test', { format = format })
+---
+- error: 'Failed to create space ''test'': 1-th field name is too long'
+...
+format = { { name = 'id', type = '100' } }
+---
+...
+s = box.schema.space.create('test', { format = format })
+---
+- error: 'Failed to create space ''test'': 1-th field has unknown field type'
+...
+format = { utils.setmap({}) }
+---
+...
+s = box.schema.space.create('test', { format = format })
+---
+- error: 'Failed to create space ''test'': 1-th field name is not specified'
+...
+-- Ensure the format is updated after index drop.
+format = { { name = 'id', type = 'unsigned' } }
+---
+...
+s = box.schema.space.create('test', { format = format })
+---
+...
+pk = s:create_index('pk')
+---
+...
+sk = s:create_index('sk', { parts = { 2, 'string' } })
+---
+...
+s:replace{1, 1}
+---
+- error: 'Tuple field 2 type does not match one required by operation: expected string'
+...
+sk:drop()
+---
+...
+s:replace{1, 1}
+---
+- [1, 1]
+...
+s:drop()
+---
+...

@@ -173,10 +173,11 @@ space_cache_replace(struct space *space)
 }
 
 /** A wrapper around space_new() for data dictionary spaces. */
-struct space *
+static void
 sc_space_new(uint32_t id, const char *name, struct key_def *key_def,
 	     struct trigger *replace_trigger,
-	     struct trigger *stmt_begin_trigger)
+	     struct trigger *stmt_begin_trigger,
+	     struct field_def *fields, uint32_t field_count)
 {
 	struct index_def *index_def = index_def_new(id, /* space id */
 						    0 /* index id */,
@@ -196,7 +197,7 @@ sc_space_new(uint32_t id, const char *name, struct key_def *key_def,
 	struct rlist key_list;
 	rlist_create(&key_list);
 	rlist_add_entry(&key_list, index_def, link);
-	struct space *space = space_new(def, &key_list);
+	struct space *space = space_new(def, &key_list, fields, field_count);
 	(void) space_cache_replace(space);
 	if (replace_trigger)
 		trigger_add(&space->on_replace, replace_trigger);
@@ -213,7 +214,6 @@ sc_space_new(uint32_t id, const char *name, struct key_def *key_def,
 	 *   a snapshot of older version.
 	 */
 	space->handler->initSystemSpace(space);
-	return space;
 }
 
 uint32_t
@@ -255,6 +255,8 @@ schema_init()
 	spaces = mh_i32ptr_new();
 	funcs = mh_i32ptr_new();
 	funcs_by_name = mh_strnptr_new();
+	struct region *region = &fiber()->gc;
+	uint32_t used = region_used(region);
 	/*
 	 * Create surrogate space objects for the mandatory system
 	 * spaces (the primal eggs from which we get all the
@@ -273,44 +275,109 @@ schema_init()
 
 	key_def_set_part(key_def, 0 /* part no */, 0 /* field no */,
 			 FIELD_TYPE_STRING);
-	(void) sc_space_new(BOX_SCHEMA_ID, "_schema", key_def,
-			    &on_replace_schema, NULL);
+	struct field_def schema_fields[1];
+	field_def_create_xc(&schema_fields[0], region, FIELD_TYPE_STRING,
+			    "key", strlen("key"));
+	sc_space_new(BOX_SCHEMA_ID, "_schema", key_def, &on_replace_schema,
+		     NULL, schema_fields, lengthof(schema_fields));
 
 	/* _space - home for all spaces. */
 	key_def_set_part(key_def, 0 /* part no */, 0 /* field no */,
 			 FIELD_TYPE_UNSIGNED);
-	(void) sc_space_new(BOX_SPACE_ID, "_space", key_def,
-			    &alter_space_on_replace_space,
-			    &on_stmt_begin_space);
+	struct field_def space_fields[7];
+	field_def_create_xc(&space_fields[0], region, FIELD_TYPE_UNSIGNED,
+			    "id", strlen("id"));
+	field_def_create_xc(&space_fields[1], region, FIELD_TYPE_UNSIGNED,
+			    "owner", strlen("owner"));
+	field_def_create_xc(&space_fields[2], region, FIELD_TYPE_STRING,
+			    "name", strlen("name"));
+	field_def_create_xc(&space_fields[3], region, FIELD_TYPE_STRING,
+			    "engine", strlen("engine"));
+	field_def_create_xc(&space_fields[4], region, FIELD_TYPE_UNSIGNED,
+			    "field_count", strlen("field_count"));
+	field_def_create_xc(&space_fields[5], region, FIELD_TYPE_MAP,
+			    "flags", strlen("flags"));
+	field_def_create_xc(&space_fields[6], region, FIELD_TYPE_ARRAY,
+			    "format", strlen("format"));
+	sc_space_new(BOX_SPACE_ID, "_space", key_def,
+		     &alter_space_on_replace_space, &on_stmt_begin_space,
+		     space_fields, lengthof(space_fields));
 
 	/* _truncate - auxiliary space for triggering space truncation. */
-	(void) sc_space_new(BOX_TRUNCATE_ID, "_truncate", key_def,
-			    &on_replace_truncate,
-			    &on_stmt_begin_truncate);
+	struct field_def truncate_fields[2];
+	field_def_create_xc(&truncate_fields[0], region, FIELD_TYPE_UNSIGNED,
+			    "id", strlen("id"));
+	field_def_create_xc(&truncate_fields[1], region, FIELD_TYPE_UNSIGNED,
+			    "count", strlen("count"));
+	sc_space_new(BOX_TRUNCATE_ID, "_truncate", key_def,
+		     &on_replace_truncate, &on_stmt_begin_truncate,
+		     truncate_fields, lengthof(truncate_fields));
 
 	/* _user - all existing users */
-	(void) sc_space_new(BOX_USER_ID, "_user", key_def, &on_replace_user,
-			    NULL);
+	struct field_def user_fields[5];
+	field_def_create_xc(&user_fields[0], region, FIELD_TYPE_UNSIGNED,
+			    "id", strlen("id"));
+	field_def_create_xc(&user_fields[1], region, FIELD_TYPE_UNSIGNED,
+			    "owner", strlen("owner"));
+	field_def_create_xc(&user_fields[2], region, FIELD_TYPE_STRING,
+			    "name", strlen("name"));
+	field_def_create_xc(&user_fields[3], region, FIELD_TYPE_STRING,
+			    "type", strlen("type"));
+	field_def_create_xc(&user_fields[4], region, FIELD_TYPE_MAP,
+			    "auth", strlen("auth"));
+	sc_space_new(BOX_USER_ID, "_user", key_def, &on_replace_user, NULL,
+		     user_fields, lengthof(user_fields));
 
 	/* _func - all executable objects on which one can have grants */
-	(void) sc_space_new(BOX_FUNC_ID, "_func", key_def, &on_replace_func,
-			    NULL);
+	struct field_def func_fields[4];
+	field_def_create_xc(&func_fields[0], region, FIELD_TYPE_UNSIGNED,
+			    "id", strlen("id"));
+	field_def_create_xc(&func_fields[1], region, FIELD_TYPE_UNSIGNED,
+			    "owner", strlen("owner"));
+	field_def_create_xc(&func_fields[2], region, FIELD_TYPE_STRING,
+			    "name", strlen("name"));
+	field_def_create_xc(&func_fields[3], region, FIELD_TYPE_UNSIGNED,
+			    "setuid", strlen("setuid"));
+	sc_space_new(BOX_FUNC_ID, "_func", key_def, &on_replace_func, NULL,
+		     func_fields, lengthof(func_fields));
 	/*
 	 * _priv - association user <-> object
 	 * The real index is defined in the snapshot.
 	 */
-	(void) sc_space_new(BOX_PRIV_ID, "_priv", key_def, &on_replace_priv,
-			    NULL);
+	struct field_def priv_fields[5];
+	field_def_create_xc(&priv_fields[0], region, FIELD_TYPE_UNSIGNED,
+			    "grantor", strlen("grantor"));
+	field_def_create_xc(&priv_fields[1], region, FIELD_TYPE_UNSIGNED,
+			    "grantee", strlen("grantee"));
+	field_def_create_xc(&priv_fields[2], region, FIELD_TYPE_STRING,
+			    "object_type", strlen("object_type"));
+	field_def_create_xc(&priv_fields[3], region, FIELD_TYPE_UNSIGNED,
+			    "object_id", strlen("object_id"));
+	field_def_create_xc(&priv_fields[4], region, FIELD_TYPE_UNSIGNED,
+			    "privilege", strlen("privilege"));
+	sc_space_new(BOX_PRIV_ID, "_priv", key_def, &on_replace_priv, NULL,
+		     priv_fields, lengthof(priv_fields));
 	/*
 	 * _cluster - association instance uuid <-> instance id
 	 * The real index is defined in the snapshot.
 	 */
-	(void) sc_space_new(BOX_CLUSTER_ID, "_cluster", key_def,
-			    &on_replace_cluster, NULL);
+	struct field_def cluster_def[2];
+	field_def_create_xc(&cluster_def[0], region, FIELD_TYPE_UNSIGNED,
+			    "id", strlen("id"));
+	field_def_create_xc(&cluster_def[1], region, FIELD_TYPE_STRING,
+			    "uuid", strlen("uuid"));
+	sc_space_new(BOX_CLUSTER_ID, "_cluster", key_def, &on_replace_cluster,
+		     NULL, cluster_def, lengthof(cluster_def));
 
-        /* _trigger - all existing SQL triggers */
-        key_def_set_part(key_def, 0, 0, FIELD_TYPE_STRING);
-	(void) sc_space_new(BOX_TRIGGER_ID, "_trigger", key_def, NULL, NULL);
+	/* _trigger - all existing SQL triggers */
+	key_def_set_part(key_def, 0, 0, FIELD_TYPE_STRING);
+	struct field_def trigger_def[2];
+	field_def_create_xc(&trigger_def[0], region, FIELD_TYPE_STRING,
+			    "name", strlen("name"));
+	field_def_create_xc(&trigger_def[1], region, FIELD_TYPE_MAP,
+			    "opts", strlen("opts"));
+	sc_space_new(BOX_TRIGGER_ID, "_trigger", key_def, NULL, NULL,
+		     trigger_def, lengthof(trigger_def));
 
 	free(key_def);
 	key_def = key_def_new(2); /* part count */
@@ -322,9 +389,23 @@ schema_init()
 	/* index no */
 	key_def_set_part(key_def, 1 /* part no */, 1 /* field no */,
 			 FIELD_TYPE_UNSIGNED);
-	(void) sc_space_new(BOX_INDEX_ID, "_index", key_def,
-			    &alter_space_on_replace_index,
-			    &on_stmt_begin_index);
+	struct field_def index_field_def[6];
+	field_def_create_xc(&index_field_def[0], region, FIELD_TYPE_UNSIGNED,
+			    "id", strlen("id"));
+	field_def_create_xc(&index_field_def[1], region, FIELD_TYPE_UNSIGNED,
+			    "iid", strlen("iid"));
+	field_def_create_xc(&index_field_def[2], region, FIELD_TYPE_STRING,
+			    "name", strlen("name"));
+	field_def_create_xc(&index_field_def[3], region, FIELD_TYPE_STRING,
+			    "type", strlen("type"));
+	field_def_create_xc(&index_field_def[4], region, FIELD_TYPE_MAP,
+			    "opts", strlen("opts"));
+	field_def_create_xc(&index_field_def[5], region, FIELD_TYPE_ARRAY,
+			    "parts", strlen("parts"));
+	sc_space_new(BOX_INDEX_ID, "_index", key_def,
+		     &alter_space_on_replace_index, &on_stmt_begin_index,
+		     index_field_def, lengthof(index_field_def));
+	region_truncate(region, used);
 }
 
 void

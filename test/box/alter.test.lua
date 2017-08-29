@@ -288,3 +288,30 @@ ts:drop()
 -- Try insert incorrect sql in index and space opts.
 --
 box.space._space:replace{600, 1, 'test', 'memtx', 0, { sql = 100 }, {}}
+
+--
+-- gh-2652: validate space format.
+--
+s = box.schema.space.create('test', { format = "format" })
+s = box.schema.space.create('test', { format = { "not_map" } })
+format = { utils.setmap({'unsigned'}) }
+s = box.schema.space.create('test', { format = format })
+format = { { name = 100 } }
+s = box.schema.space.create('test', { format = format })
+long = string.rep('a', box.schema.NAME_MAX + 1)
+format = { { name = long } }
+s = box.schema.space.create('test', { format = format })
+format = { { name = 'id', type = '100' } }
+s = box.schema.space.create('test', { format = format })
+format = { utils.setmap({}) }
+s = box.schema.space.create('test', { format = format })
+
+-- Ensure the format is updated after index drop.
+format = { { name = 'id', type = 'unsigned' } }
+s = box.schema.space.create('test', { format = format })
+pk = s:create_index('pk')
+sk = s:create_index('sk', { parts = { 2, 'string' } })
+s:replace{1, 1}
+sk:drop()
+s:replace{1, 1}
+s:drop()
