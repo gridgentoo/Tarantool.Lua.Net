@@ -1795,23 +1795,7 @@ user_has_data(struct user *user)
 void
 user_def_fill_auth_data(struct user_def *user, const char *auth_data)
 {
-	uint8_t type = mp_typeof(*auth_data);
-	if (type == MP_ARRAY || type == MP_NIL) {
-		/*
-		 * Nothing useful.
-		 * MP_ARRAY is a special case since Lua arrays are
-		 * indistinguishable from tables, so an empty
-		 * table may well be encoded as an msgpack array.
-		 * Treat as no data.
-		 */
-		return;
-	}
-	if (mp_typeof(*auth_data) != MP_MAP) {
-		/** Prevent users from making silly mistakes */
-		tnt_raise(ClientError, ER_CREATE_USER,
-			  user->name, "invalid password format, "
-			  "use box.schema.user.passwd() to reset password");
-	}
+	assert(mp_typeof(*auth_data) == MP_MAP);
 	uint32_t mech_count = mp_decode_map(&auth_data);
 	for (uint32_t i = 0; i < mech_count; i++) {
 		if (mp_typeof(*auth_data) != MP_STR) {
@@ -1882,16 +1866,8 @@ user_def_new_from_tuple(struct tuple *tuple)
 		const char *auth_data =
 			tuple_field(tuple, BOX_USER_FIELD_AUTH_MECH_LIST);
 		const char *tmp = auth_data;
-		bool is_auth_empty;
-		if (mp_typeof(*auth_data) == MP_ARRAY &&
-		    mp_decode_array(&tmp) == 0) {
-			is_auth_empty = true;
-		} else if (mp_typeof(*auth_data) == MP_MAP &&
-			   mp_decode_map(&tmp) == 0) {
-			is_auth_empty = true;
-		} else {
-			is_auth_empty = false;
-		}
+		assert(mp_typeof(*tmp) == MP_MAP);
+		bool is_auth_empty = mp_decode_map(&tmp) == 0;
 		if (!is_auth_empty && user->type == SC_ROLE)
 			tnt_raise(ClientError, ER_CREATE_ROLE, user->name,
 				  "authentication data can not be set for a "\
