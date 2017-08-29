@@ -957,9 +957,22 @@ restart:
 			     itr->key, itr->iterator_type);
 	}
 
-	if (itr->tx != NULL && *result != NULL)
-		rc = vy_tx_track(itr->tx, itr->index, *result, false);
-
+	if (itr->tx != NULL) {
+		struct tuple *stop_key = (*result != NULL ? *result :
+					  index->env->empty_key);
+		if (iterator_direction(itr->iterator_type) >= 0) {
+			rc = vy_tx_track(itr->tx, index,
+					 (struct tuple *)itr->key,
+					 itr->iterator_type != ITER_GT ||
+					 tuple_field_count(itr->key) == 0,
+					 stop_key, true);
+		} else {
+			rc = vy_tx_track(itr->tx, index, stop_key, true,
+					 (struct tuple *)itr->key,
+					 itr->iterator_type != ITER_LT ||
+					 tuple_field_count(itr->key) == 0);
+		}
+	}
 clear:
 	if (prev_key != NULL)
 		tuple_unref(prev_key);

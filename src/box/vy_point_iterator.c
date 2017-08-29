@@ -425,8 +425,8 @@ restart:
 	 * key arrives we will be sent to read view.
 	 */
 	if (itr->tx != NULL) {
-		rc = vy_tx_track(itr->tx, itr->index,
-				 (struct tuple *) itr->key, false);
+		rc = vy_tx_track_point(itr->tx, itr->index,
+				       (struct tuple *) itr->key);
 		if (rc != 0)
 			goto done;
 	}
@@ -460,9 +460,8 @@ done:
 	if (rc == 0) {
 		rc = vy_point_iterator_apply_history(itr, &history);
 		if (itr->tx != NULL)
-			rc = vy_tx_track(itr->tx, itr->index,
-					 (struct tuple *) itr->key,
-					 itr->curr_stmt == NULL);
+			rc = vy_tx_track_point(itr->tx, itr->index,
+					       (struct tuple *) itr->key);
 	}
 	*result = itr->curr_stmt;
 	vy_point_iterator_cleanup(&history, region_svp);
