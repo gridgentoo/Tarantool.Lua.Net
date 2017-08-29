@@ -31,6 +31,8 @@
 
 #include "field_def.h"
 #include "trivia/util.h"
+#include "diag.h"
+#include "small/region.h"
 
 const char *field_type_strs[] = {
 	/* [FIELD_TYPE_ANY]      = */ "any",
@@ -41,6 +43,17 @@ const char *field_type_strs[] = {
 	/* [FIELD_TYPE_INTEGER]  = */ "integer",
 	/* [FIELD_TYPE_SCALAR]   = */ "scalar",
 	/* [FIELD_TYPE_MAP]      = */ "map",
+};
+
+const struct opt_def field_def_reg[] = {
+	OPT_DEF_ENUM("type", field_type, struct field_def, type),
+	OPT_DEF("name", OPT_STRPTR, struct field_def, name),
+	OPT_END,
+};
+
+const struct field_def field_def_default = {
+	.type = FIELD_TYPE_ANY,
+	.name = NULL,
 };
 
 enum field_type
@@ -60,4 +73,21 @@ field_type_by_name(const char *name)
 	else if (strcasecmp(name, "str") == 0)
 		return FIELD_TYPE_STRING;
 	return field_type_MAX;
+}
+
+int
+field_def_create(struct field_def *field, struct region *region,
+		 enum field_type type, const char *name, uint32_t name_len)
+{
+	char *region_name = (char *) region_alloc(region, name_len + 1);
+	if (region_name == NULL) {
+		diag_set(OutOfMemory, name_len + 1, "region_alloc",
+			 "region_name");
+		return -1;
+	}
+	field->type = type;
+	field->name = region_name;
+	memcpy(region_name, name, name_len);
+	field->name[name_len] = 0;
+	return 0;
 }
