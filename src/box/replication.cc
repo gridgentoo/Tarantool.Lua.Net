@@ -216,8 +216,8 @@ replicaset_update(struct applier **appliers, int count)
 	replicaset_foreach(replica) {
 		if (replica->applier == NULL)
 			continue;
-		applier_stop(replica->applier); /* cancels a background fiber */
-		applier_delete(replica->applier);
+		tx_applier_stop(replica->applier); /* cancels a background fiber */
+		tx_applier_delete(replica->applier);
 		replica->applier = NULL;
 	}
 

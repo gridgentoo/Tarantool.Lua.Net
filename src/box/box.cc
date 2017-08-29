@@ -495,7 +495,7 @@ cfg_get_replication(int *p_count)
 		if (applier == NULL) {
 			/* Delete created appliers */
 			while (--i >= 0)
-				applier_delete(appliers[i]);
+				tx_applier_delete(appliers[i]);
 			return NULL;
 		}
 		appliers[i] = applier; /* link to the list */
@@ -520,10 +520,10 @@ box_sync_replication(double timeout)
 
 	auto guard = make_scoped_guard([=]{
 		for (int i = 0; i < count; i++)
-			applier_delete(appliers[i]); /* doesn't affect diag */
+			tx_applier_delete(appliers[i]); /* doesn't affect diag */
 	});
 
-	applier_connect_all(appliers, count, timeout);
+	tx_applier_connect_all(appliers, count, timeout);
 	replicaset_update(appliers, count);
 
 	guard.is_active = false;
@@ -546,7 +546,7 @@ box_set_replication(void)
 	box_sync_replication(REPLICATION_CFG_TIMEOUT);
 	replicaset_foreach(replica) {
 		if (replica->applier != NULL)
-			applier_resume(replica->applier);
+			tx_applier_resume(replica->applier);
 	}
 }
 
@@ -1308,7 +1308,7 @@ bootstrap_from_master(struct replica *master)
 {
 	struct applier *applier = master->applier;
 	assert(applier != NULL);
-	applier_resume_to_state(applier, APPLIER_READY, TIMEOUT_INFINITY);
+	tx_applier_resume_to_state(applier, APPLIER_READY, TIMEOUT_INFINITY);
 	assert(applier->state == APPLIER_READY);
 
 	say_info("bootstrapping replica from %s",
@@ -1320,7 +1320,7 @@ bootstrap_from_master(struct replica *master)
 	 */
 
 	assert(!tt_uuid_is_nil(&INSTANCE_UUID));
-	applier_resume_to_state(applier, APPLIER_INITIAL_JOIN, TIMEOUT_INFINITY);
+	tx_applier_resume_to_state(applier, APPLIER_INITIAL_JOIN, TIMEOUT_INFINITY);
 
 	/*
 	 * Process initial data (snapshot or dirty disk data).
@@ -1330,7 +1330,7 @@ bootstrap_from_master(struct replica *master)
 	join_journal_create(&join_journal);
 	journal_set(&join_journal.base);
 
-	applier_resume_to_state(applier, APPLIER_FINAL_JOIN, TIMEOUT_INFINITY);
+	tx_applier_resume_to_state(applier, APPLIER_FINAL_JOIN, TIMEOUT_INFINITY);
 	/*
 	 * Process final data (WALs).
 	 */
@@ -1339,7 +1339,7 @@ bootstrap_from_master(struct replica *master)
 	recovery_journal_create(&journal, &replicaset_vclock);
 	journal_set(&journal.base);
 
-	applier_resume_to_state(applier, APPLIER_JOINED, TIMEOUT_INFINITY);
+	tx_applier_resume_to_state(applier, APPLIER_JOINED, TIMEOUT_INFINITY);
 
 	/* Clear the pointer to journal before it goes out of scope */
 	journal_set(NULL);
@@ -1348,7 +1348,7 @@ bootstrap_from_master(struct replica *master)
 	engine_end_recovery();
 
 	/* Switch applier to initial state */
-	applier_resume_to_state(applier, APPLIER_READY, TIMEOUT_INFINITY);
+	tx_applier_resume_to_state(applier, APPLIER_READY, TIMEOUT_INFINITY);
 	assert(applier->state == APPLIER_READY);
 }
 
@@ -1423,9 +1423,9 @@ box_cfg_xc(void)
 	if (module_init() != 0)
 		diag_raise();
 	schema_init();
-	replication_init();
 	port_init();
 	iproto_init();
+	replication_init();
 	wal_thread_start();
 
 	title("loading");
@@ -1573,7 +1573,7 @@ box_cfg_xc(void)
 	/* Follow replica */
 	replicaset_foreach(replica) {
 		if (replica->applier != NULL)
-			applier_resume(replica->applier);
+			tx_applier_resume(replica->applier);
 	}
 
 	title("running");

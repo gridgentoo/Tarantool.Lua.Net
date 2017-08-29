@@ -44,6 +44,10 @@
 
 #include "vclock.h"
 
+#include "small/mempool.h"
+#include "diag.h"
+#include "session.h"
+
 struct xstream;
 
 enum { APPLIER_SOURCE_MAXLEN = 1024 }; /* enough to fit URI with passwords */
@@ -100,8 +104,16 @@ struct applier {
 	socklen_t addr_len;
 	/** EV watcher for I/O */
 	struct ev_io io;
-	/** Input/output buffer for buffered IO */
-	struct iobuf *iobuf;
+	/** Input/output buffers for buffered IO */
+	struct iobuf *iobuf[2];
+	/** Index of current input buffer */
+	int input_index;
+	/** Amount of unparsed input bytes */
+	size_t input_unparsed;
+	/** IO buffers swap condition */
+	struct fiber_cond swap_buffers_cond;
+	/** Mempool for messages */
+	struct mempool msg_pool;
 	/** Triggers invoked on state change */
 	struct rlist on_state;
 	/** Channel used by applier_connect_all() and applier_resume() */
@@ -110,28 +122,26 @@ struct applier {
 	struct xstream *join_stream;
 	/** xstream to process rows during final JOIN and SUBSCRIBE */
 	struct xstream *subscribe_stream;
+	/* Session for applier */
+	struct session *session;
+	/* If tx processing failed we will setup this diag
+	 * and cancel applier fiber. */
+	struct diag cancel_reason;
+	/* If tx want some state from applier but have some error then
+	 * tx will "steal" diag from applier and raise exception in tx.
+	 * In this case we souldn't rethrow error in applier fiber. */
+	bool fiber_nothrow;
+	/* If true all request processing should be silently skipped.
+	 * For example, in case of socket errors we need to flush applier
+	 * queue before new connection attempt. */
+	bool drop_requests;
 };
-
-/**
- * Start a client to a remote master using a background fiber.
- *
- * If recovery is finalized (i.e. r->writer != NULL) then the client
- * connect to a master and follow remote updates using SUBSCRIBE command.
- *
- * If recovery is not finalized (i.e. r->writer == NULL) then the client
- * connect to a master, download and process snapshot using JOIN command
- * and then switch to follow mode.
- *
- * \sa fiber_start()
- */
-void
-applier_start(struct applier *applier);
 
 /**
  * Stop a client.
  */
 void
-applier_stop(struct applier *applier);
+tx_applier_stop(struct applier *applier);
 
 /**
  * Allocate an instance of applier object, create applier and initialize
@@ -148,7 +158,7 @@ applier_new(const char *uri, struct xstream *join_stream,
  * Destroy and delete a applier.
  */
 void
-applier_delete(struct applier *applier);
+tx_applier_delete(struct applier *applier);
 
 /*
  * Connect all appliers to remote peer and receive UUID
@@ -161,20 +171,20 @@ applier_delete(struct applier *applier);
  *
  */
 void
-applier_connect_all(struct applier **appliers, int count,
+tx_applier_connect_all(struct applier **appliers, int count,
 		    double timeout);
 
 /*
  * Resume execution of applier until \a state.
  */
 void
-applier_resume_to_state(struct applier *applier, enum applier_state state,
+tx_applier_resume_to_state(struct applier *applier, enum applier_state state,
 			double timeout);
 
 /*
  * Resume execution of applier.
  */
 void
-applier_resume(struct applier *applier);
+tx_applier_resume(struct applier *applier);
 
 #endif /* TARANTOOL_APPLIER_H_INCLUDED */

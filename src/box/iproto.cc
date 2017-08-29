@@ -40,6 +40,7 @@
 #include "version.h"
 #include "fiber.h"
 #include "cbus.h"
+#include "fiber_pool.h"
 #include "say.h"
 #include "sio.h"
 #include "evio.h"
@@ -58,6 +59,7 @@
 #include "replication.h" /* instance_uuid */
 #include "iproto_constants.h"
 #include "rmean.h"
+#include "coio_task.h"
 
 /* The number of iproto messages in flight */
 enum { IPROTO_MSG_MAX = 768 };
@@ -144,8 +146,8 @@ iproto_msg_delete(struct cmsg *msg)
  * - on_connect trigger must be processed before any other
  *   request on this connection.
  */
-static struct cpipe tx_pipe;
-static struct cpipe net_pipe;
+struct cpipe tx_pipe;
+struct cpipe net_pipe;
 /* A pointer to the transaction processor cord. */
 struct cord *tx_cord;
 
@@ -1233,6 +1235,7 @@ static struct evio_service binary; /* iproto binary listener */
 static int
 net_cord_f(va_list /* ap */)
 {
+	coio_enable();
 	/* Got to be called in every thread using iobuf */
 	iobuf_init();
 	mempool_create(&iproto_msg_pool, &cord()->slabc,
@@ -1252,14 +1255,15 @@ net_cord_f(va_list /* ap */)
 			  "rmean", "struct rmean");
 	}
 
-	struct cbus_endpoint endpoint;
-	/* Create "net" endpoint. */
-	cbus_endpoint_create(&endpoint, "net", fiber_schedule_cb, fiber());
+	static struct fiber_pool net_fiber_pool;
+	fiber_pool_create(&net_fiber_pool, "net", FIBER_POOL_SIZE,
+			  FIBER_POOL_IDLE_TIMEOUT);
+
 	/* Create a pipe to "tx" thread. */
 	cpipe_create(&tx_pipe, "tx");
 	cpipe_set_max_input(&tx_pipe, IPROTO_MSG_MAX/2);
-	/* Process incomming messages. */
-	cbus_loop(&endpoint);
+	while (!fiber_is_cancelled())
+		fiber_yield();
 
 	cpipe_destroy(&tx_pipe);
 	/*
