@@ -14,8 +14,9 @@ set(SRCDIR ${CMAKE_CURRENT_SOURCE_DIR})
 
 include_directories(${SRCDIR})
 
-add_definitions(-DSQLITE_MAX_WORKER_THREADS=0)
+add_definitions(-DSQLITE_MAX_WORKER_THREADS=0)2
 add_definitions(-DSQLITE_OMIT_VACUUM=1)
+add_definitions(-DSQLITE_DEFAULT_FOREIGN_KEYS=1)
 
 set(TEST_DEFINITIONS
     SQLITE_DEBUG=1
